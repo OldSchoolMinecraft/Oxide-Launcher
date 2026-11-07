@@ -1,0 +1,26 @@
+[package]
+name = "rust173-launcher"
+version = "0.1.0"
+edition = "2024"
+description = "A native desktop launcher for Rust173"
+
+[dependencies]
+iced = { version = "0.14", default-features = false, features = ["tiny-skia", "canvas", "svg", "tokio", "x11", "wayland"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+directories = "6"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+tokio = { version = "1", features = ["fs", "rt-multi-thread"] }
+futures-util = "0.3"
+sha2 = "0.10"
+tempfile = "3"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tar = "0.4"
+flate2 = "1"
+
+# Keep software-rendered gradients responsive in debug builds as well.
+[profile.dev.package.tiny-skia]
+opt-level = 2
+
+[profile.dev.package.iced_tiny_skia]
+opt-level = 2
