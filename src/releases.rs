@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-const API: &str = "https://api.github.com/repos/LeowFlow/Rust173/releases/latest";
+const API: &str = "https://api.github.com/repos/LeowFlow/Oxide/releases/latest";
 const MAX_DOWNLOAD: u64 = 512 * 1024 * 1024;
 const MAX_UNPACKED: u64 = 2 * 1024 * 1024 * 1024;
 #[derive(Debug, Clone, Deserialize)]
