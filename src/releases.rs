@@ -45,7 +45,7 @@ impl Installed {
 }
 fn client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
-        .user_agent("Rust173-Launcher/0.1.0")
+        .user_agent("Oxide-Launcher/0.1.0")
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(300))
         .build()
@@ -59,7 +59,7 @@ pub async fn latest() -> Result<Release, String> {
         .await
         .map_err(|e| format!("Could not reach GitHub: {e}"))?;
     match response.status().as_u16() {
-        404 => Err("No public release found. Check that LeowFlow/Rust173 is public and has a published release. You can also use a local executable in Settings.".into()),
+        404 => Err("No public release found. If you are offline, you can use a local executable in Settings.".into()),
         403 | 429 => Err("GitHub's request limit was reached. Try again later; your installed game is still available.".into()),
         _ => response.error_for_status().map_err(|e| e.to_string())?.json().await.map_err(|e| format!("Invalid release response: {e}")),
     }
@@ -110,7 +110,7 @@ pub async fn install(release: Release, data: PathBuf) -> Result<Installed, Strin
         || url.host_str() != Some("github.com")
         || !url
             .path()
-            .starts_with("/LeowFlow/Rust173/releases/download/")
+            .starts_with("/LeowFlow/Oxide/releases/download/")
     {
         return Err("Unexpected release download URL.".into());
     }

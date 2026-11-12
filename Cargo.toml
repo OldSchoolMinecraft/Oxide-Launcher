@@ -1,11 +1,11 @@
 [package]
-name = "rust173-launcher"
+name = "oxide-launcher"
 version = "0.1.0"
 edition = "2024"
-description = "A native desktop launcher for Rust173"
+description = "A native desktop launcher for Oxide"
 
 [dependencies]
-iced = { version = "0.14", default-features = false, features = ["tiny-skia", "canvas", "svg", "tokio", "x11", "wayland"] }
+iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "canvas", "svg", "tokio", "x11", "wayland"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 directories = "6"
@@ -18,7 +18,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1"
 
-# Keep software-rendered gradients responsive in debug builds as well.
+# Keep fallback software-rendered gradients responsive in debug builds as well.
 [profile.dev.package.tiny-skia]
 opt-level = 2
 

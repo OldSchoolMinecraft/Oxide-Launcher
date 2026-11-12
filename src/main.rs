@@ -17,7 +17,7 @@ use std::{
 
 fn main() -> iced::Result {
     iced::application(App::new, App::update, App::view)
-        .title("Rust173 Launcher")
+        .title("Oxide Launcher")
         .theme(App::theme)
         .subscription(App::subscription)
         .window(window::Settings {
@@ -283,7 +283,7 @@ impl App {
                 }
             }
             Message::OpenProject => {
-                let _ = open_url("https://github.com/LeowFlow/Rust173");
+                let _ = open_url("https://github.com/LeowFlow/Oxide");
             }
             _ => {}
         }
@@ -325,7 +325,7 @@ impl App {
                 self.save();
                 self.child = Some(child);
                 self.error = None;
-                self.status = "Rust173 is running.".into();
+                self.status = "Oxide is running.".into();
                 self.active_visibility = self.settings.visibility;
                 if let Some(id) = self.window {
                     return match self.active_visibility {

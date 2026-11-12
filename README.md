@@ -1,6 +1,6 @@
-# Rust173 Launcher
+# Oxide Launcher
 
-A native Rust + Iced desktop launcher for [Rust173](https://github.com/LeowFlow/Rust173), a Rust port of Minecraft Beta 1.7.3. A late-2000s desktop style uses glossy controls, beveled blue-gray panels, and an original block landscape. Dark mode is on by default; the light-mode option is saved in Settings.
+A native Rust + Iced desktop launcher for [Oxide](https://github.com/LeowFlow/Oxide), a Rust port of Minecraft Beta 1.7.3. A late-2000s desktop style uses glossy controls, beveled blue-gray panels, and an original block landscape. Dark mode is on by default; the light-mode option is saved in Settings.
 
 ## Run
 
@@ -10,7 +10,7 @@ Install a current stable Rust toolchain, then:
 cargo run --release
 ```
 
-Linux needs a graphical X11 or Wayland session and the usual system font and windowing libraries. Windows and macOS use their native window backends. The launcher uses Iced 0.14's software renderer, so it does not require Vulkan. Build natively on each platform with `cargo build --release`; the binary is `target/release/rust173-launcher` (`.exe` on Windows). On macOS this is an executable, not a signed `.app` bundle.
+Linux needs a graphical X11 or Wayland session and the usual system font and windowing libraries. Windows and macOS use their native window backends. The launcher uses Iced 0.14's GPU-accelerated wgpu renderer, with a software fallback if GPU initialization fails. Build natively on each platform with `cargo build --release`; the binary is `target/release/rust173-launcher` (`.exe` on Windows). On macOS this is an executable, not a signed `.app` bundle.
 
 ## Using the launcher
 
@@ -30,7 +30,7 @@ The masthead reserves a logo area beside the project name. `assets/logo-placehol
 
 ## GitHub release contract
 
-The launcher reads `https://api.github.com/repos/LeowFlow/Rust173/releases/latest`, selecting stable published releases. At implementation time, this endpoint returned 404 publicly; live downloads could not be verified. A missing/private repository or absent release is reported in the UI, and local executable mode remains usable.
+The launcher reads `https://api.github.com/repos/LeowFlow/Oxide/releases/latest`, selecting stable published releases. At implementation time, this endpoint returned 404 publicly; live downloads could not be verified. A missing/private repository or absent release is reported in the UI, and local executable mode remains usable.
 
 Publish exactly one matching asset per supported OS/CPU. Names must identify `linux`, `windows`, or `macos`/`darwin`/`osx`, plus `x86_64`/`amd64`/`x64` or `aarch64`/`arm64`. For example:
 

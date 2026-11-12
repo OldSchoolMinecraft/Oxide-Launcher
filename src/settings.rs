@@ -174,7 +174,7 @@ pub struct Paths {
 }
 impl Paths {
     pub fn new() -> Result<Self, String> {
-        let dirs = directories::ProjectDirs::from("dev", "Rust173", "Rust173Launcher")
+        let dirs = directories::ProjectDirs::from("dev", "Oxide", "OxideLauncher")
             .ok_or("Could not locate application directories")?;
         Ok(Self {
             config: dirs.config_dir().join("settings.json"),

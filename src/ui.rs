@@ -80,7 +80,7 @@ impl App {
         }
         let footer = container(
             row![
-                text("Rust173 Launcher  0.1.0").size(11),
+                text("Oxide Launcher  0.1.0").size(11),
                 Space::new().width(Fill),
                 text(if self.dirty.is_some() {
                     "Saving settings…"
@@ -219,7 +219,7 @@ impl App {
         let release_title = self
             .release
             .as_ref()
-            .map(|r| format!("Rust173 {}", r.tag_name))
+            .map(|r| format!("Oxide {}", r.tag_name))
             .unwrap_or("GitHub releases".into());
         let mut release = column![
             text(release_title).size(22),
