@@ -10,7 +10,7 @@ Install a current stable Rust toolchain, then:
 cargo run --release
 ```
 
-Linux needs a graphical X11 or Wayland session and the usual system font and windowing libraries. Windows and macOS use their native window backends. The launcher uses Iced 0.14's GPU-accelerated wgpu renderer, with a software fallback if GPU initialization fails. Build natively on each platform with `cargo build --release`; the binary is `target/release/rust173-launcher` (`.exe` on Windows). On macOS this is an executable, not a signed `.app` bundle.
+Linux needs a graphical X11 or Wayland session and the usual system font and windowing libraries. Windows and macOS use their native window backends. The launcher uses Iced 0.14's GPU-accelerated wgpu renderer, with a software fallback if GPU initialization fails. Build natively on each platform with `cargo build --release`; the binary is `target/release/oxide-launcher` (`.exe` on Windows). Use the [native packaging scripts and four-platform CI](docs/BUILDING.md) for Windows ZIPs, a Linux tarball, and Intel/Apple Silicon Mac ZIPs containing an ad-hoc signed `.app` bundle. `oxide-launcher --version` checks the version without opening a window.
 
 ## Using the launcher
 

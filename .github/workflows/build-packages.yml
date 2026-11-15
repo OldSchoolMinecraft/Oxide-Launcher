@@ -1,0 +1,87 @@
+name: Build launcher packages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/launcher-build-*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            platform: windows-x86_64
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x86_64
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            platform: macos-x86_64
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            platform: macos-aarch64
+    env:
+      CARGO_TERM_COLOR: always
+      MACOSX_DEPLOYMENT_TARGET: '12.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.97.1'
+          targets: ${{ matrix.target }}
+          components: rustfmt, clippy
+      - name: Install Linux build libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libfontconfig1-dev libudev-dev libvulkan1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: launcher-release-${{ matrix.target }}
+          cache-on-failure: true
+      - run: cargo fmt --check
+      - run: cargo clippy --release --locked --target ${{ matrix.target }} --all-targets -- -D warnings
+      - run: cargo test --release --locked --target ${{ matrix.target }}
+      - name: Test archive structure and Mac app metadata
+        run: python scripts/test-packaging.py
+      - name: Build and smoke-test native launcher package
+        run: python scripts/package-build.py --target ${{ matrix.target }} --output-dir .local/ci-build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher-${{ matrix.platform }}
+          path: .local/ci-build/public/*
+          if-no-files-found: error
+          retention-days: 14
+
+  collect:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: launcher-*
+          path: .local/downloads
+      - name: Verify all four native launcher packages and checksums
+        run: python scripts/collect-builds.py .local/downloads .local/packages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oxide-launcher-packages
+          path: .local/packages/*
+          if-no-files-found: error
+          retention-days: 14

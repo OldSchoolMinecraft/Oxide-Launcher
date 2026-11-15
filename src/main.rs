@@ -16,6 +16,10 @@ use std::{
 };
 
 fn main() -> iced::Result {
+    if matches!(std::env::args().nth(1).as_deref(), Some("--version" | "-V")) {
+        println!("oxide-launcher {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     iced::application(App::new, App::update, App::view)
         .title("Oxide Launcher")
         .theme(App::theme)
