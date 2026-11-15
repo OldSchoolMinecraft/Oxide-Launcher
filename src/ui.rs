@@ -1,4 +1,4 @@
-//! Launcher views. Shared chrome lives in `chrome`; branding is a replaceable SVG.
+//! Classic launcher proportions with native Rust controls and offline access.
 use crate::{
     App, Field, Message, Page, chrome, landscape,
     settings::{Animation, Lighting, Visibility},
@@ -6,295 +6,300 @@ use crate::{
 use iced::{
     Element, Fill, Font,
     widget::{
-        Space, button, canvas, checkbox, column, container, pick_list, row, scrollable, stack, svg,
+        button, canvas, checkbox, column, container, markdown, pick_list, row, scrollable, stack,
         text, text_input,
     },
 };
 
-const LOGO: &[u8] = include_bytes!("../assets/logo-placeholder.svg");
+pub(super) fn parse_release_notes(body: Option<&str>) -> Vec<markdown::Item> {
+    markdown::parse(
+        body.filter(|body| !body.trim().is_empty())
+            .unwrap_or("No release notes available."),
+    )
+    .collect()
+}
 
 impl App {
     pub(super) fn view(&self) -> Element<'_, Message> {
-        let theme = self.theme();
-        let muted = chrome::muted(&theme);
-        let logo = row![
-            svg(svg::Handle::from_memory(LOGO)).width(78).height(78),
-            column![
-                text("RUST173").size(38).font(Font {
-                    weight: iced::font::Weight::Bold,
-                    ..Font::MONOSPACE
-                }),
-                text("Minecraft Beta 1.7.3  /  Rust client")
-                    .size(12)
-                    .color(muted),
-            ]
-            .spacing(4)
-        ]
-        .spacing(16)
-        .align_y(iced::Center);
-        let masthead = stack![
-            canvas::Canvas::new(landscape::Landscape)
-                .width(Fill)
-                .height(148),
-            container(logo)
-                .width(425)
-                .height(148)
-                .padding([28, 26])
-                .style(chrome::heading),
-        ];
-        let toolbar = container(
+        // LauncherTabPanel: compact system tabs above the content, not a toolbar.
+        let tabs = container(
             row![
-                button("  Play  ")
-                    .padding([7, 22])
-                    .style(move |t, s| chrome::tab(t, s, self.page == Page::Play))
-                    .on_press(Message::Page(Page::Play)),
-                button("Settings")
-                    .padding([7, 22])
-                    .style(move |t, s| chrome::tab(t, s, self.page == Page::Settings))
-                    .on_press(Message::Page(Page::Settings)),
-                Space::new().width(Fill),
-                button("Project website ↗")
-                    .padding([7, 14])
-                    .style(chrome::control)
-                    .on_press(Message::OpenProject),
+                self.page_tab("Update Notes", Page::Play),
+                self.page_tab("Launcher Log", Page::Log),
+                self.page_tab("Profile Editor", Page::Settings),
             ]
-            .spacing(6)
-            .align_y(iced::Center),
+            .spacing(2)
+            .align_y(iced::Bottom),
         )
-        .padding(7)
-        .style(chrome::heading);
+        .padding(iced::Padding {
+            top: 2.,
+            right: 4.,
+            bottom: 0.,
+            left: 4.,
+        })
+        .width(Fill)
+        .style(chrome::shell);
         let content = match self.page {
             Page::Play => self.play_view(),
-            Page::Settings => self.settings_view(),
+            Page::Log => self.log_view(),
+            Page::Settings => container(self.settings_view())
+                .padding(10)
+                .height(Fill)
+                .into(),
         };
-        let mut body = column![
-            masthead,
-            toolbar,
-            container(content).padding(12).height(Fill)
-        ]
-        .spacing(1);
+        let content = container(content)
+            .width(Fill)
+            .height(Fill)
+            .style(chrome::frame);
+        let mut body = column![tabs, content, self.launch_bar()].spacing(0);
         if let Some(error) = &self.save_error {
             body = body.push(
-                container(text(error).size(12).color(theme.palette().danger)).padding([6, 12]),
+                container(text(error).size(12).color(landscape::color(0xa00000)))
+                    .padding([2, 6])
+                    .width(Fill)
+                    .style(chrome::shell),
             );
         }
-        let footer = container(
-            row![
-                text("Oxide Launcher  0.1.0").size(11),
-                Space::new().width(Fill),
-                text(if self.dirty.is_some() {
-                    "Saving settings…"
-                } else if self.save_error.is_some() {
-                    "Settings not saved"
-                } else {
-                    "Settings saved"
-                })
-                .size(11),
-            ]
-            .spacing(12),
-        )
-        .padding([7, 12])
-        .style(chrome::heading);
-        body = body.push(footer);
-        container(
-            container(body)
-                .padding(5)
-                .width(Fill)
-                .height(Fill)
-                .style(chrome::frame),
-        )
-        .padding(20)
-        .width(Fill)
-        .height(Fill)
-        .style(chrome::desktop)
-        .into()
+        // LauncherPanel: the thin status/progress area lives below the bottom bar.
+        body = body.push(
+            container(
+                row![
+                    text(&self.status).size(11).width(Fill),
+                    text(if self.dirty.is_some() {
+                        "Saving settings…"
+                    } else if self.save_error.is_some() {
+                        "Settings not saved"
+                    } else {
+                        "Settings saved"
+                    })
+                    .size(11),
+                ]
+                .spacing(8),
+            )
+            .padding([2, 6])
+            .width(Fill)
+            .style(chrome::shell),
+        );
+        container(body)
+            .width(Fill)
+            .height(Fill)
+            .style(chrome::desktop)
+            .into()
     }
 
-    fn play_view(&self) -> Element<'_, Message> {
-        let theme = self.theme();
-        let muted = chrome::muted(&theme);
+    fn page_tab<'a>(&self, label: &'a str, page: Page) -> Element<'a, Message> {
+        let active = self.page == page;
+        button(text(label).size(12))
+            .padding([4, 9])
+            .style(move |t, s| chrome::tab(t, s, active))
+            .on_press(Message::Page(page))
+            .into()
+    }
+
+    fn launch_bar(&self) -> Element<'_, Message> {
         let version = if !self.settings.executable.trim().is_empty() {
-            "Local executable".into()
+            "local build"
         } else {
             self.installed
                 .as_ref()
-                .map(|i| i.tag.clone())
-                .unwrap_or("Not installed".into())
+                .map(|i| i.tag.as_str())
+                .unwrap_or("not installed")
         };
         let title = if self.child.is_some() {
             "Game running"
         } else if self.busy {
             "Please wait…"
         } else if self.installed.is_none() && self.settings.executable.trim().is_empty() {
-            "Install and play"
+            "Install & Play"
         } else {
-            "Launch game"
+            "Play"
         };
         let enabled = !self.busy
             && self.child.is_none()
             && (self.installed.is_some()
                 || !self.settings.executable.trim().is_empty()
                 || self.release.is_some());
-        let launch = button(text(title).size(19).font(Font {
-            weight: iced::font::Weight::Bold,
-            ..Font::DEFAULT
-        }))
-        .padding([13, 18])
+        let player = column![
+            row![
+                text("Username:").size(12),
+                text_input("Player name", &self.settings.username)
+                    .on_input(|v| Message::Edit(Field::Username, v))
+                    .padding([5, 6])
+                    .size(12)
+                    .style(chrome::player_input)
+            ]
+            .spacing(6)
+            .align_y(iced::Center),
+            row![
+                button(container(text("Edit Profile").size(12)).center_x(Fill))
+                    .width(Fill)
+                    .padding([5, 6])
+                    .style(chrome::control)
+                    .on_press(Message::Page(Page::Settings)),
+                button(container(text("Check for updates").size(12)).center_x(Fill))
+                    .width(Fill)
+                    .padding([5, 6])
+                    .style(chrome::control)
+                    .on_press_maybe((!self.busy).then_some(Message::Check)),
+            ]
+            .spacing(6)
+        ]
+        .spacing(6);
+        let play = button(
+            container(text(title).size(16).font(Font {
+                weight: iced::font::Weight::Bold,
+                ..Font::DEFAULT
+            }))
+            .center_x(Fill)
+            .center_y(Fill),
+        )
         .width(Fill)
+        .height(54)
+        .padding(6)
         .style(chrome::launch)
         .on_press_maybe(enabled.then_some(Message::Play));
-        let player = column![
-            text("Username").size(13),
-            text_input("Player name", &self.settings.username)
-                .on_input(|v| Message::Edit(Field::Username, v))
-                .padding(10)
-                .size(17)
-                .style(chrome::input),
-            text("Offline player name; no account required.")
-                .size(11)
-                .color(muted),
-            Space::new().height(3),
+        let account = column![
+            text(format!("Welcome, {}", self.settings.username)).size(12),
+            text("Minecraft Beta 1.7.3").size(11),
+            text(version).size(11),
+        ]
+        .spacing(4)
+        .width(Fill)
+        .align_x(iced::Right);
+        // Three balanced columns with shared vertical alignment and outer gutters.
+        container(
             row![
-                text("Version").size(12).color(muted).width(Fill),
-                text(version).size(12)
+                container(player).width(Fill).center_y(Fill),
+                container(play).width(Fill).center_y(Fill),
+                container(account).width(Fill).center_y(Fill),
             ]
-            .spacing(8),
-            row![
-                text("Window").size(12).color(muted).width(Fill),
-                text(format!(
-                    "{} × {}",
-                    self.settings.width, self.settings.height
-                ))
-                .size(12)
-            ],
-            Space::new().height(5),
-            launch,
+            .spacing(24),
+        )
+        .padding([12, 14])
+        .height(88)
+        .width(Fill)
+        .style(chrome::shell)
+        .into()
+    }
+
+    fn play_view(&self) -> Element<'_, Message> {
+        let title = self
+            .release
+            .as_ref()
+            .map(|r| format!("Oxide {}", r.tag_name))
+            .unwrap_or_else(|| "Welcome to Oxide!".into());
+        let mut news = column![
+            text("Oxide News").size(32).font(Font {
+                weight: iced::font::Weight::Bold,
+                ..Font::DEFAULT
+            }),
+            text(title)
+                .size(16)
+                .color(landscape::color(0xaaaaff))
+                .font(Font {
+                    weight: iced::font::Weight::Bold,
+                    ..Font::DEFAULT
+                }),
         ]
-        .spacing(9);
-        let connection = column![
-            row![
-                text("Server").size(12).color(muted).width(Fill),
-                text(if self.settings.server.trim().is_empty() {
-                    "Not set"
-                } else {
-                    self.settings.server.trim()
-                })
-                .size(12),
-            ]
-            .spacing(8),
-            button(text("Edit launch options…").size(13))
-                .padding([7, 10])
-                .width(Fill)
-                .style(chrome::control)
-                .on_press(Message::Page(Page::Settings)),
-        ]
-        .spacing(12);
-        let sidebar = column![
-            panel("Player", player.into()),
-            panel("Connection", connection.into())
-        ]
-        .spacing(12)
-        .width(iced::Length::FillPortion(4));
-        let mut actions = row![
-            button("Check for updates")
-                .padding([7, 12])
-                .style(chrome::control)
-                .on_press_maybe((!self.busy).then_some(Message::Check))
-        ]
-        .spacing(8);
+        .spacing(16);
+        if let Some(error) = &self.error {
+            news = news.push(text(error).size(13).color(landscape::color(0xffb0a0)));
+        }
         if self
             .release
             .as_ref()
             .is_some_and(|r| self.installed.as_ref().is_none_or(|i| i.tag != r.tag_name))
         {
-            actions = actions.push(
-                button("Install latest")
-                    .padding([7, 12])
-                    .style(chrome::control)
+            news = news.push(
+                button(text("Install latest release").size(14))
+                    .style(chrome::news_link)
+                    .padding(0)
                     .on_press_maybe(
                         (!self.busy && self.child.is_none()).then_some(Message::Install(false)),
                     ),
             );
         }
-        let release_title = self
-            .release
-            .as_ref()
-            .map(|r| format!("Oxide {}", r.tag_name))
-            .unwrap_or("GitHub releases".into());
-        let mut release = column![
-            text(release_title).size(22),
-            text(&self.status).size(13).color(muted),
-            actions
-        ]
-        .spacing(14);
-        if let Some(error) = &self.error {
-            release = release.push(
-                container(text(error).size(13).color(theme.palette().danger))
-                    .padding(12)
-                    .width(Fill)
-                    .style(chrome::inset),
+        news = news
+            .push(text("Release notes").size(16).font(Font {
+                weight: iced::font::Weight::Bold,
+                ..Font::DEFAULT
+            }))
+            .push(
+                markdown::view(
+                    &self.release_notes,
+                    markdown::Settings::with_text_size(
+                        14,
+                        markdown::Style {
+                            link_color: landscape::color(0xaaaaff),
+                            ..markdown::Style::from(chrome::theme(true))
+                        },
+                    ),
+                )
+                .map(Message::OpenNewsLink),
             );
-        }
-        release = release.push(text("Release notes").size(13)).push(
-            container(
-                scrollable(
-                    text(
-                        self.release
-                            .as_ref()
-                            .and_then(|r| r.body.as_deref())
-                            .filter(|b| !b.trim().is_empty())
-                            .unwrap_or("No release notes available."),
-                    )
-                    .size(13),
-                )
-                .spacing(8)
-                .height(150),
-            )
-            .padding(12)
+        let sidebar = column![
+            text("Project links:").size(20).font(Font {
+                weight: iced::font::Weight::Bold,
+                ..Font::DEFAULT
+            }),
+            button(text("GitHub Repo").size(14))
+                .style(chrome::news_link)
+                .padding(0)
+                .on_press(Message::OpenProject),
+            button(text("OS-MC Website").size(14))
+                .style(chrome::news_link)
+                .padding(0)
+                .on_press(Message::OpenOldSchoolMinecraft),
+            button(text("OS-MC Discord").size(14))
+                .style(chrome::news_link)
+                .padding(0)
+                .on_press(Message::OpenDiscord),
+        ]
+        .spacing(6)
+        .width(180);
+        let page = container(row![container(news).width(Fill), sidebar].spacing(26))
+            .padding(iced::Padding {
+                top: 20.,
+                right: 18.,
+                bottom: 24.,
+                left: 32.,
+            })
             .width(Fill)
-            .style(chrome::inset),
-        );
-        let updates = panel(
-            "Release information",
-            scrollable(release).spacing(10).height(Fill).into(),
-        )
-        .width(iced::Length::FillPortion(6))
-        .height(Fill);
-        scrollable(
-            column![
-                row![updates, sidebar].spacing(12).height(430),
-                container(
-                    row![
-                        text(if self.child.is_some() {
-                            "■  Running"
-                        } else if self.busy {
-                            "■  Working"
-                        } else {
-                            "■  Idle"
-                        })
-                        .size(11),
-                        Space::new().width(Fill),
-                        text("Minecraft Beta 1.7.3").size(11)
-                    ]
-                    .spacing(8)
-                )
-                .padding([8, 10])
-                .style(chrome::inset)
-            ]
-            .spacing(12),
-        )
-        .spacing(10)
+            .style(chrome::news);
+        stack![
+            canvas::Canvas::new(landscape::Dirt)
+                .width(Fill)
+                .height(Fill),
+            scrollable(page).spacing(2).height(Fill),
+        ]
         .height(Fill)
         .into()
+    }
+
+    fn log_view(&self) -> Element<'_, Message> {
+        let lines = self
+            .launcher_log
+            .iter()
+            .fold(String::new(), |mut lines, line| {
+                lines.push_str(line);
+                lines.push('\n');
+                lines
+            });
+        container(scrollable(text(lines).size(12).font(Font::MONOSPACE)).height(Fill))
+            .padding(6)
+            .width(Fill)
+            .height(Fill)
+            .style(chrome::inset)
+            .into()
     }
 
     fn settings_view(&self) -> Element<'_, Message> {
         let muted = chrome::muted(&self.theme());
         let appearance = column![
             checkbox(self.settings.dark_mode)
-                .label("Dark mode")
+                .label("Dark launcher log")
                 .on_toggle(Message::DarkMode),
-            text("Use the dark appearance for the launcher.")
+            text("Use dark colors in Launcher Log. Profile Editor uses the classic gray controls.")
                 .size(12)
                 .color(muted),
         ]
@@ -450,4 +455,46 @@ fn input<'a>(
     .spacing(6)
     .width(Fill)
     .into()
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn news_markdown_renders_structure_and_inline_styles() {
+        let items = parse_release_notes(Some(
+            "# Release\n\n**Bold** and *italic* with `code` and [GitHub](https://github.com/LeowFlow/Oxide).\n\n- Sounds\n- Textures\n\n```text\nhydra-client --username Steve\n```\n\n> Note",
+        ));
+        assert!(matches!(items[0], markdown::Item::Heading(..)));
+        let markdown::Item::Paragraph(ref text) = items[1] else {
+            panic!("paragraph")
+        };
+        let spans = text.spans(markdown::Style::from(chrome::theme(true)));
+        assert!(
+            spans
+                .iter()
+                .any(|s| s.font.is_some_and(|f| f.weight == iced::font::Weight::Bold))
+        );
+        assert!(
+            spans
+                .iter()
+                .any(|s| s.font.is_some_and(|f| f.style == iced::font::Style::Italic))
+        );
+        assert!(spans.iter().any(|s| s.font == Some(Font::MONOSPACE)));
+        assert!(
+            spans
+                .iter()
+                .any(|s| s.link.as_deref() == Some("https://github.com/LeowFlow/Oxide"))
+        );
+        assert!(
+            items
+                .iter()
+                .any(|i| matches!(i, markdown::Item::List { bullets, .. } if bullets.len()==2))
+        );
+        assert!(items.iter().any(
+            |i| matches!(i, markdown::Item::CodeBlock { code, .. } if code.contains("--username"))
+        ));
+        assert!(items.iter().any(|i| matches!(i, markdown::Item::Quote(_))));
+        assert_eq!(parse_release_notes(None).len(), 1);
+    }
 }

@@ -21,8 +21,8 @@ fn main() -> iced::Result {
         .theme(App::theme)
         .subscription(App::subscription)
         .window(window::Settings {
-            size: iced::Size::new(1060., 790.),
-            min_size: Some(iced::Size::new(780., 650.)),
+            size: iced::Size::new(900., 550.),
+            min_size: Some(iced::Size::new(780., 500.)),
             ..Default::default()
         })
         .run()
@@ -30,6 +30,7 @@ fn main() -> iced::Result {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
     Play,
+    Log,
     Settings,
 }
 #[derive(Debug, Clone, Copy)]
@@ -61,15 +62,20 @@ enum Message {
     Tick,
     Window(Option<window::Id>),
     OpenProject,
+    OpenOldSchoolMinecraft,
+    OpenDiscord,
+    OpenNewsLink(String),
 }
 struct App {
     paths: Result<Paths, String>,
     settings: Settings,
     page: Page,
     release: Option<Release>,
+    release_notes: Vec<iced::widget::markdown::Item>,
     installed: Option<Installed>,
     busy: bool,
     status: String,
+    launcher_log: std::collections::VecDeque<String>,
     error: Option<String>,
     save_error: Option<String>,
     dirty: Option<Instant>,
@@ -92,9 +98,13 @@ impl App {
             settings: loaded.unwrap_or_default(),
             page: Page::Play,
             release: None,
+            release_notes: ui::parse_release_notes(None),
             installed,
             busy: true,
             status: "Checking GitHub for the latest release…".into(),
+            launcher_log: std::collections::VecDeque::from([
+                "[INFO] Oxide Launcher started. Checking for releases.".into(),
+            ]),
             error,
             save_error: None,
             dirty: None,
@@ -112,7 +122,7 @@ impl App {
         )
     }
     fn theme(&self) -> Theme {
-        chrome::theme(self.settings.dark_mode)
+        chrome::theme(self.settings.dark_mode && self.page != Page::Settings)
     }
 
     fn subscription(&self) -> Subscription<Message> {
@@ -142,6 +152,32 @@ impl App {
         }
     }
     fn update(&mut self, message: Message) -> Task<Message> {
+        let previous = (
+            self.status.clone(),
+            self.error.clone(),
+            self.save_error.clone(),
+        );
+        let task = self.update_inner(message);
+        for line in [
+            (self.status != previous.0).then(|| format!("[INFO] {}", self.status)),
+            (self.error != previous.1)
+                .then(|| self.error.as_ref().map(|e| format!("[ERROR] {e}")))
+                .flatten(),
+            (self.save_error != previous.2)
+                .then(|| self.save_error.as_ref().map(|e| format!("[ERROR] {e}")))
+                .flatten(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            self.launcher_log.push_back(line);
+            while self.launcher_log.len() > 256 {
+                self.launcher_log.pop_front();
+            }
+        }
+        task
+    }
+    fn update_inner(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Page(page) => {
                 self.page = page;
@@ -202,13 +238,14 @@ impl App {
                             .installed
                             .as_ref()
                             .is_none_or(|i| i.tag != release.tag_name);
+                        self.release_notes = ui::parse_release_notes(release.body.as_deref());
                         self.release = Some(release);
                         if outdated
                             && self.settings.auto_update
                             && self.child.is_none()
                             && self.settings.executable.trim().is_empty()
                         {
-                            return self.update(Message::Install(false));
+                            return self.update_inner(Message::Install(false));
                         }
                     }
                     Err(e) => {
@@ -249,7 +286,7 @@ impl App {
             }
             Message::Play if self.child.is_none() && !self.busy => {
                 if self.settings.executable.trim().is_empty() && self.installed.is_none() {
-                    return self.update(Message::Install(true));
+                    return self.update_inner(Message::Install(true));
                 }
                 return self.launch();
             }
@@ -282,8 +319,21 @@ impl App {
                     }
                 }
             }
+            Message::OpenOldSchoolMinecraft => {
+                let _ = open_url("https://os-mc.net");
+            }
+            Message::OpenDiscord => {
+                let _ = open_url("https://discord.gg/J3vKjD3");
+            }
             Message::OpenProject => {
                 let _ = open_url("https://github.com/LeowFlow/Oxide");
+            }
+            Message::OpenNewsLink(link) => {
+                if let Some(url) = news_url(&link)
+                    && let Err(error) = open_url(url.as_str())
+                {
+                    self.error = Some(format!("Could not open news link: {error}"));
+                }
             }
             _ => {}
         }
@@ -306,14 +356,17 @@ impl App {
                 PathBuf::from(self.settings.executable.trim())
             };
             if !executable.is_absolute() || !executable.is_file() {
-                return Err("Choose an existing absolute executable path in Settings.".into());
+                return Err(
+                    "Choose an existing absolute executable path in Profile Editor.".into(),
+                );
             }
             let game_dir = paths.data.join("game");
             fs::create_dir_all(&game_dir).map_err(|e| e.to_string())?;
             let log = fs::File::create(paths.data.join("game.log")).map_err(|e| e.to_string())?;
             Command::new(&executable)
                 .args(args)
-                .current_dir(game_dir)
+                .env("HYDRA_HOME", &game_dir)
+                .current_dir(&game_dir)
                 .stdin(Stdio::null())
                 .stdout(log.try_clone().map_err(|e| e.to_string())?)
                 .stderr(log)
@@ -351,6 +404,11 @@ impl App {
         }
     }
 }
+fn news_url(link: &str) -> Option<reqwest::Url> {
+    reqwest::Url::parse(link)
+        .ok()
+        .filter(|url| matches!(url.scheme(), "https" | "http"))
+}
 fn open_url(url: &str) -> std::io::Result<Child> {
     #[cfg(target_os = "windows")]
     {
@@ -380,6 +438,49 @@ impl Drop for App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn checked_release_refreshes_markdown_and_empty_notes_keep_a_fallback() {
+        use iced::widget::markdown::Item;
+        let root = tempfile::tempdir().unwrap();
+        let mut app = isolated_app(root.path());
+        app.settings.auto_update = false;
+        let _ = app.update(Message::Checked(Ok(Release {
+            tag_name: "v0.2.0".into(),
+            body: Some(
+                "# Oxide v0.2.0\n\n**Available:** Windows\n\n- Bundled sounds\n- Textures".into(),
+            ),
+            assets: Vec::new(),
+        })));
+        assert!(matches!(app.release_notes[0], Item::Heading(..)));
+        assert!(
+            app.release_notes
+                .iter()
+                .any(|item| matches!(item, Item::List {bullets,..} if bullets.len()==2))
+        );
+        let _ = app.update(Message::Checked(Err("Offline".into())));
+        assert!(matches!(app.release_notes[0], Item::Heading(..)));
+        let _ = app.update(Message::Checked(Ok(Release {
+            tag_name: "v0.2.1".into(),
+            body: Some(" \n".into()),
+            assets: Vec::new(),
+        })));
+        assert_eq!(app.release_notes.len(), 1);
+        assert!(matches!(app.release_notes[0], Item::Paragraph(_)));
+    }
+    #[test]
+    fn news_links_only_open_web_urls() {
+        assert!(news_url("https://github.com/LeowFlow/Oxide").is_some());
+        assert!(news_url("http://example.org/notes").is_some());
+        for link in [
+            "javascript:alert(1)",
+            "file:///C:/test.exe",
+            "mailto:test@example.org",
+            "relative/path",
+            "",
+        ] {
+            assert!(news_url(link).is_none());
+        }
+    }
     fn isolated_app(root: &std::path::Path) -> App {
         App {
             paths: Ok(Paths {
@@ -389,9 +490,11 @@ mod tests {
             settings: Settings::default(),
             page: Page::Play,
             release: None,
+            release_notes: ui::parse_release_notes(None),
             installed: None,
             busy: false,
             status: String::new(),
+            launcher_log: Default::default(),
             error: None,
             save_error: None,
             dirty: None,
@@ -436,6 +539,29 @@ mod tests {
         assert!(log.contains("--username\nHydra_Explorer"));
         assert!(log.contains("/some path/$(touch NEVER_EXECUTE)"));
     }
+    #[test]
+    fn launcher_log_records_failures_and_bounds_session_history() {
+        let root = tempfile::tempdir().unwrap();
+        let mut app = isolated_app(root.path());
+        for index in 0..300 {
+            let _ = app.update(Message::Checked(Err(format!("Offline check {index}"))));
+        }
+        assert_eq!(app.launcher_log.len(), 256);
+        assert!(
+            app.launcher_log
+                .back()
+                .unwrap()
+                .contains("Offline check 299")
+        );
+        assert!(
+            !app.launcher_log
+                .iter()
+                .any(|line| line.ends_with("Offline check 0"))
+        );
+        let _ = app.update(Message::Page(Page::Log));
+        assert_eq!(app.launcher_log.len(), 256);
+    }
+
     #[test]
     fn failed_launch_keeps_launcher_available() {
         let root = tempfile::tempdir().unwrap();

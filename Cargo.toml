@@ -5,7 +5,7 @@ edition = "2024"
 description = "A native desktop launcher for Oxide"
 
 [dependencies]
-iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "canvas", "svg", "tokio", "x11", "wayland"] }
+iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "canvas", "svg", "markdown", "tokio", "x11", "wayland"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 directories = "6"

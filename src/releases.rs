@@ -59,7 +59,7 @@ pub async fn latest() -> Result<Release, String> {
         .await
         .map_err(|e| format!("Could not reach GitHub: {e}"))?;
     match response.status().as_u16() {
-        404 => Err("No public release found. If you are offline, you can use a local executable in Settings.".into()),
+        404 => Err("No public release found. If you are offline, you can use a local executable in Profile Editor.".into()),
         403 | 429 => Err("GitHub's request limit was reached. Try again later; your installed game is still available.".into()),
         _ => response.error_for_status().map_err(|e| e.to_string())?.json().await.map_err(|e| format!("Invalid release response: {e}")),
     }
@@ -96,7 +96,7 @@ pub fn compatible_asset(release: &Release) -> Result<Asset, String> {
         .collect();
     match matches.as_slice() {
         [asset] => Ok((*asset).clone()),
-        [] => Err(format!("No compatible release download for {} / {}. Use a local executable in Settings.", std::env::consts::OS, std::env::consts::ARCH)),
+        [] => Err(format!("No compatible release download for {} / {}. Use a local executable in Profile Editor.", std::env::consts::OS, std::env::consts::ARCH)),
         _ => Err("Several downloads match this platform. Release assets need one unambiguous OS/architecture package.".into()),
     }
 }
@@ -108,9 +108,7 @@ pub async fn install(release: Release, data: PathBuf) -> Result<Installed, Strin
     let url = reqwest::Url::parse(&asset.browser_download_url).map_err(|e| e.to_string())?;
     if url.scheme() != "https"
         || url.host_str() != Some("github.com")
-        || !url
-            .path()
-            .starts_with("/LeowFlow/Oxide/releases/download/")
+        || !url.path().starts_with("/LeowFlow/Oxide/releases/download/")
     {
         return Err("Unexpected release download URL.".into());
     }
@@ -305,6 +303,71 @@ fn find_executable(root: &Path) -> Result<PathBuf, String> {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    #[ignore = "Requires OXIDE_RELEASE_ARCHIVE pointing to a native client release package"]
+    fn prepared_client_archive_matches_launcher_contract() {
+        let archive = PathBuf::from(
+            std::env::var_os("OXIDE_RELEASE_ARCHIVE").expect("OXIDE_RELEASE_ARCHIVE"),
+        );
+        let name = archive.file_name().unwrap().to_string_lossy().to_string();
+        assert!(asset_matches(
+            &name,
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        ));
+        let root = tempfile::tempdir().unwrap();
+        let install = root.path().join("install");
+        fs::create_dir(&install).unwrap();
+        unpack(&archive, &name, &install).unwrap();
+        let executable = find_executable(&install).unwrap();
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &fs::read(install.join("RESOURCE_MANIFEST.json")).expect("bundled resource manifest"),
+        )
+        .unwrap();
+        let audio = manifest["audioFiles"].as_object().expect("audioFiles");
+        assert_eq!(audio.len(), 224);
+        for (relative, digest) in audio {
+            let bytes =
+                fs::read(install.join(relative)).expect("launcher must preserve bundled audio");
+            assert_eq!(
+                format!("{:x}", Sha256::digest(bytes)),
+                digest.as_str().unwrap()
+            );
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let game = root.path().join("game");
+        fs::create_dir(&game).unwrap();
+        let version = std::process::Command::new(&executable)
+            .arg("--version")
+            .current_dir(&game)
+            .output()
+            .unwrap();
+        assert!(version.status.success());
+        assert!(String::from_utf8_lossy(&version.stdout).starts_with("hydra-client "));
+        let settings = crate::settings::Settings {
+            username: "Launcher_Test".into(),
+            mute: true,
+            assets: "/a path/game.zip".into(),
+            sounds: "/a path/resources".into(),
+            ..Default::default()
+        };
+        let output = std::process::Command::new(executable)
+            .args(settings.arguments().unwrap())
+            .arg("--help")
+            .env("HYDRA_HOME", &game)
+            .current_dir(&game)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
     use super::*;
     #[test]
     fn platform_selection() {
