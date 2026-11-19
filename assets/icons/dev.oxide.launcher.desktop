@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Oxide Launcher
+Comment=Launcher for the Oxide Minecraft Beta 1.7.3 client
+Exec=oxide-launcher
+Icon=dev.oxide.launcher
+Terminal=false
+Categories=Game;
+StartupWMClass=dev.oxide.launcher

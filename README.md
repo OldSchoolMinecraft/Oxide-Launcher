@@ -12,11 +12,16 @@ cargo run --release
 
 Linux needs a graphical X11 or Wayland session and the usual system font and windowing libraries. Windows and macOS use their native window backends. The launcher uses Iced 0.14's GPU-accelerated wgpu renderer, with a software fallback if GPU initialization fails. Build natively on each platform with `cargo build --release`; the binary is `target/release/oxide-launcher` (`.exe` on Windows). Use the [native packaging scripts and four-platform CI](docs/BUILDING.md) for Windows ZIPs, a Linux tarball, and Intel/Apple Silicon Mac ZIPs containing an ad-hoc signed `.app` bundle. `oxide-launcher --version` checks the version without opening a window.
 
+The classic Minecraft grass-block icon is embedded in Windows executables and running windows. Mac app packages include the matching `.icns` icon; Linux packages include a PNG and desktop entry for application-menu integration. See [icon packaging and Linux setup](docs/BUILDING.md#application-icons).
+
 ## Using the launcher
 
 - Enter an offline player name and choose **Install & play**. Names use 1–16 ASCII letters, digits, or underscores.
 - GitHub is checked on startup. Automatic updates are enabled by default and can be disabled in Profile Editor. **Check for updates** checks again; **Install latest** installs the available release. An installed version can still launch when GitHub is unreachable.
 - Settings include an optional offline server, singleplayer server JAR, texture and sound paths, audio mute, smooth lighting, first-person animations, and window dimensions. Leave resource fields empty to use game defaults. Use absolute paths for resources.
+- The game defaults to **854 × 480**. Change **Profile Editor → Game window & audio** to choose another game size. Existing saved sizes are preserved.
+- **Profile Editor → Launcher → Launcher startup width/height** controls the launcher window independently (default **900 × 550**). Changes apply next time the launcher opens. Invalid/incomplete values fall back to the default; valid sizes are 780–4096 wide and 480–4096 high.
+- Windows game processes start without a console window; stdout and stderr still go to `game.log`.
 - Choose to keep the launcher open, minimize it, or hide it while playing. Minimized/hidden launchers return when the child game process exits. Closing a visible launcher leaves the game running.
 - To use a development build, put its absolute executable path in **Profile Editor → Local installation**. Managed installation updates are skipped at startup while this override is active.
 

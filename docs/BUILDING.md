@@ -61,3 +61,65 @@ second platform-matching launcher archive to a game release would make the game'
 asset selection ambiguous. The launcher updates the game, not itself.
 
 Local archive regression tests: `python scripts/test-packaging.py`.
+
+## Verified build (2026-11-15)
+
+All four native build jobs and final collection passed in Actions run 43751006517,
+from source commit ed886334a5b649d311d5cc1692b4a8664e751833. Formatting, strict
+Clippy, optimized tests, archive tests and headless native startup checks passed.
+Both Mac app bundles passed ad-hoc code-signature verification. Native archive
+headers, permissions and hashes were checked again after download, and the
+Windows executable's --version startup was verified locally.
+
+Collected archives and SHA256SUMS.txt are in `.local/builds/v0.1.0/packages/`.
+The private validation report is alongside that directory. No GitHub launcher
+release was created or published. Mac/Linux desktop GUI validation remains open.
+
+## Application icons
+
+The classic Minecraft grass-block favicon from the supplied OLauncher reference
+is used for the launcher. Assets and provenance are in `assets/icons/`; these
+are third-party Mojang artwork. `python scripts/generate-icons.py` regenerates
+the platform variants (requires Pillow only when regenerating; normal builds
+and packaging use the checked-in assets and do not need Pillow).
+
+- Windows: `build.rs` embeds the multi-size `.ico` resource in every native
+  `.exe` build. The Windows SDK resource compiler is used through `winresource`.
+- macOS: both Intel and Apple Silicon `.app` packages include
+  `Contents/Resources/minecraft.icns`, referenced by `CFBundleIconFile` before
+  code signing. Use the `.app` for Finder/Dock icons; a raw Mach-O binary does
+  not carry a Finder app icon.
+- Linux: the archive includes `oxide-launcher.png` and
+  `dev.oxide.launcher.desktop`. The window application ID matches the desktop
+  entry name. Desktop environments use these files for menu/taskbar icons;
+  a raw ELF file does not have a portable embedded file-manager icon.
+
+To install the Linux launcher and its desktop icon for the current user, run
+these commands from the extracted archive. Ensure `~/.local/bin` is on the
+PATH of your graphical desktop session:
+
+```sh
+install -Dm755 oxide-launcher "$HOME/.local/bin/oxide-launcher"
+install -Dm644 dev.oxide.launcher.desktop "$HOME/.local/share/applications/dev.oxide.launcher.desktop"
+install -Dm644 oxide-launcher.png "$HOME/.local/share/icons/hicolor/256x256/apps/dev.oxide.launcher.png"
+```
+
+The Iced window uses the original 32x32 RGBA pixels for its native window icon
+(on platforms supporting window icons). Packaging tests require the Mac bundle
+icon and metadata and the Linux desktop entry and icon. The existing four-platform
+CI packages these files with each native build. New Mac/Linux desktop icon
+appearance still needs a native graphical session to verify visually.
+
+## Startup window sizes and Windows console behavior
+
+The launcher reads `launcher_width` and `launcher_height` from its saved settings
+before creating its window. These are independent of game `width`/`height`.
+Older settings files receive launcher defaults of 900x550; invalid or partial
+launcher-size edits also fall back to that size on the next start. Game arguments
+default to `--width 854 --height 480`; existing saved game sizes are preserved.
+The client continues to interpret these arguments using its own window/DPI handling.
+
+Windows builds use the GUI subsystem for the launcher and `CREATE_NO_WINDOW` for
+the game child process. The client is started directly with its argument list,
+working directory, `HYDRA_HOME`, and redirected stdout/stderr preserved. The native
+Windows child-process regression test checks that no console is attached.

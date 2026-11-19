@@ -21,6 +21,8 @@ TARGETS = {
     "aarch64-apple-darwin": "macos-aarch64",
 }
 APP = "Oxide Launcher.app"
+ICONS = ROOT / "assets/icons"
+DESKTOP = "dev.oxide.launcher.desktop"
 
 
 def command(*args, cwd=ROOT):
@@ -61,18 +63,27 @@ def mac_bundle(binary, stage, version):
         "CFBundleDisplayName": "Oxide Launcher",
         "CFBundleExecutable": "oxide-launcher",
         "CFBundlePackageType": "APPL",
+        "CFBundleIconFile": "minecraft.icns",
         "CFBundleShortVersionString": version,
         "CFBundleVersion": version,
         "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,
         "NSPrincipalClass": "NSApplication",
     }
+    resources = bundle / "Contents/Resources"
+    resources.mkdir()
+    shutil.copy2(ICONS / "minecraft.icns", resources / "minecraft.icns")
     (bundle / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
     return bundle, executable
 
 
+def linux_desktop_files(stage):
+    shutil.copy2(ICONS / "minecraft.png", stage / "oxide-launcher.png")
+    shutil.copy2(ICONS / DESKTOP, stage / DESKTOP)
+
+
 def make_archive(stage, destination, executable):
-    # Stage is created from scratch and contains only the binary/app and README.
+    # Stage contains only the native launcher, platform icon/desktop files, and README.
     files = sorted(path for path in stage.rglob("*") if path.is_file())
     if destination.name.endswith(".zip"):
         with zipfile.ZipFile(destination, "x", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -105,17 +116,28 @@ def verify_archive(path, platform, version):
             raise ValueError("Invalid launcher archive inventory")
         if platform.startswith("macos"):
             executable = APP + "/Contents/MacOS/oxide-launcher"
-            allowed = {"README.txt", APP + "/Contents/Info.plist", executable}
+            icon = APP + "/Contents/Resources/minecraft.icns"
+            allowed = {"README.txt", APP + "/Contents/Info.plist", executable, icon}
+            if not allowed.issubset(names):
+                raise ValueError("Mac launcher app or icon missing")
             extra = set(names) - allowed
             if any(not name.startswith(APP + "/Contents/_CodeSignature/") for name in extra):
                 raise ValueError("Unexpected file in Mac launcher archive")
             info = plistlib.loads(read(APP + "/Contents/Info.plist"))
             if info["CFBundleShortVersionString"] != version or info["CFBundleExecutable"] != "oxide-launcher":
                 raise ValueError("Incorrect Mac app metadata")
+            if info.get("CFBundleIconFile") != "minecraft.icns" or read(icon) != (ICONS / "minecraft.icns").read_bytes():
+                raise ValueError("Incorrect Mac app icon")
         else:
             executable = "oxide-launcher.exe" if platform.startswith("windows") else "oxide-launcher"
-            if set(names) != {executable, "README.txt"}:
+            expected = {executable, "README.txt"}
+            if platform.startswith("linux"):
+                expected.update({"oxide-launcher.png", DESKTOP})
+            if set(names) != expected:
                 raise ValueError("Unexpected file in launcher archive")
+            if platform.startswith("linux"):
+                if read("oxide-launcher.png") != (ICONS / "minecraft.png").read_bytes() or read(DESKTOP) != (ICONS / DESKTOP).read_bytes():
+                    raise ValueError("Incorrect Linux desktop entry or icon")
         if executable not in names or mode(executable) & 0o111 != 0o111:
             raise ValueError("Launcher executable or permissions missing")
         if not zip_format and any(not entry.isfile() for entry in archive.getmembers()):
@@ -130,6 +152,11 @@ def readme(version, platform):
 
 Extract the entire archive. Windows: run oxide-launcher.exe.
 Linux: run ./oxide-launcher in a graphical X11/Wayland session.
+For a Linux application-menu entry with its Minecraft icon, run these commands
+from the extracted folder (ensure ~/.local/bin is on your session PATH):
+  install -Dm755 oxide-launcher "$HOME/.local/bin/oxide-launcher"
+  install -Dm644 dev.oxide.launcher.desktop "$HOME/.local/share/applications/dev.oxide.launcher.desktop"
+  install -Dm644 oxide-launcher.png "$HOME/.local/share/icons/hicolor/256x256/apps/dev.oxide.launcher.png"
 macOS: open Oxide Launcher.app. These builds are ad-hoc signed, not notarized.
 
 Enter an offline player name and choose Install & Play. The launcher downloads
@@ -148,6 +175,7 @@ Windows: 64-bit Windows with compatible system graphics drivers.
 
 Game downloads: https://github.com/LeowFlow/Oxide
 Launcher source: https://github.com/moderatorman/Rust173-Launcher
+The Minecraft grass-block icon is Mojang artwork.
 Not affiliated with Mojang or Microsoft.
 """
 
@@ -188,6 +216,8 @@ def main():
         else:
             executable = stage / name
             shutil.copy2(binary, executable)
+            if platform.startswith("linux"):
+                linux_desktop_files(stage)
         (stage / "README.txt").write_text(readme(version, platform), encoding="utf-8", newline="\n")
         extension = ".tar.gz" if platform.startswith("linux") else ".zip"
         archive = public / f"Oxide-Launcher-v{version}-{platform}{extension}"

@@ -306,6 +306,28 @@ impl App {
         .spacing(8);
         let launcher = column![
             row![
+                input(
+                    "Launcher startup width",
+                    "900",
+                    &self.settings.launcher_width,
+                    Field::LauncherWidth
+                ),
+                input(
+                    "Launcher startup height",
+                    "550",
+                    &self.settings.launcher_height,
+                    Field::LauncherHeight
+                ),
+            ]
+            .spacing(16),
+            text(if self.settings.launcher_size().is_some() {
+                "Applies when you reopen the launcher. Game size is configured separately below."
+            } else {
+                "Use width 780–4096 and height 480–4096. Invalid sizes open at 900 × 550."
+            })
+            .size(12)
+            .color(muted),
+            row![
                 text("When the game starts").size(13).width(Fill),
                 pick_list(
                     Visibility::ALL,
@@ -352,8 +374,18 @@ impl App {
         .spacing(12);
         let game = column![
             row![
-                input("Window width", "1280", &self.settings.width, Field::Width),
-                input("Window height", "800", &self.settings.height, Field::Height)
+                input(
+                    "Game window width",
+                    "854",
+                    &self.settings.width,
+                    Field::Width
+                ),
+                input(
+                    "Game window height",
+                    "480",
+                    &self.settings.height,
+                    Field::Height
+                )
             ]
             .spacing(16),
             row![

@@ -2,3 +2,4 @@
 /.idea/
 /graphify-out/
 /.local/
+__pycache__/
