@@ -16,13 +16,35 @@ use std::{
 };
 
 fn main() -> iced::Result {
+    if matches!(std::env::args().nth(1).as_deref(), Some("--version" | "-V")) {
+        println!("oxide-launcher {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    let (width, height) = Paths::new()
+        .ok()
+        .and_then(|paths| Settings::load(&paths.config).ok())
+        .and_then(|settings| settings.launcher_size())
+        .unwrap_or((900, 550));
     iced::application(App::new, App::update, App::view)
         .title("Oxide Launcher")
         .theme(App::theme)
         .subscription(App::subscription)
         .window(window::Settings {
-            size: iced::Size::new(900., 550.),
-            min_size: Some(iced::Size::new(780., 500.)),
+            icon: Some(
+                window::icon::from_rgba(
+                    include_bytes!("../assets/icons/minecraft.rgba").to_vec(),
+                    32,
+                    32,
+                )
+                .expect("embedded 32x32 Minecraft icon"),
+            ),
+            #[cfg(target_os = "linux")]
+            platform_specific: window::settings::PlatformSpecific {
+                application_id: "dev.oxide.launcher".into(),
+                ..Default::default()
+            },
+            size: iced::Size::new(width as f32, height as f32),
+            min_size: Some(iced::Size::new(780., 480.)),
             ..Default::default()
         })
         .run()
@@ -43,6 +65,8 @@ enum Field {
     Executable,
     Width,
     Height,
+    LauncherWidth,
+    LauncherHeight,
 }
 #[derive(Debug, Clone)]
 enum Message {
@@ -196,6 +220,8 @@ impl App {
                     Field::Executable => &mut self.settings.executable,
                     Field::Width => &mut self.settings.width,
                     Field::Height => &mut self.settings.height,
+                    Field::LauncherWidth => &mut self.settings.launcher_width,
+                    Field::LauncherHeight => &mut self.settings.launcher_height,
                 } = value;
                 self.dirty = Some(Instant::now());
             }
@@ -363,7 +389,7 @@ impl App {
             let game_dir = paths.data.join("game");
             fs::create_dir_all(&game_dir).map_err(|e| e.to_string())?;
             let log = fs::File::create(paths.data.join("game.log")).map_err(|e| e.to_string())?;
-            Command::new(&executable)
+            game_command(&executable)
                 .args(args)
                 .env("HYDRA_HOME", &game_dir)
                 .current_dir(&game_dir)
@@ -404,6 +430,20 @@ impl App {
         }
     }
 }
+fn game_command(executable: &std::path::Path) -> Command {
+    let command = Command::new(executable);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut command = command;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+    #[cfg(not(target_os = "windows"))]
+    command
+}
+
 fn news_url(link: &str) -> Option<reqwest::Url> {
     reqwest::Url::parse(link)
         .ok()
@@ -503,6 +543,36 @@ mod tests {
             launch_after_install: false,
             active_visibility: Visibility::KeepOpen,
         }
+    }
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn game_process_starts_without_an_attached_console() {
+        let output = game_command(&std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "tests::console_probe",
+                "--ignored",
+                "--nocapture",
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("no attached console"));
+    }
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore = "Invoked by the Windows child-process regression test"]
+    fn console_probe() {
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn GetConsoleWindow() -> *mut std::ffi::c_void;
+        }
+        assert!(unsafe { GetConsoleWindow() }.is_null());
+        println!("no attached console");
     }
     #[test]
     fn closing_flushes_username_edits() {

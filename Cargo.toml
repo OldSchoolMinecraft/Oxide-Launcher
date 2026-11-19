@@ -18,6 +18,9 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1"
 
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1.34"
+
 # Keep fallback software-rendered gradients responsive in debug builds as well.
 [profile.dev.package.tiny-skia]
 opt-level = 2

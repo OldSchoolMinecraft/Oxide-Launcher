@@ -1,0 +1,7 @@
+Minecraft grass-block icon (Mojang), requested for Oxide Launcher.
+Source: favicon.png from the classic launcher.jar referenced by the supplied OLauncher distribution.
+Source JAR SHA-1: eabbff5ff8e21250e33670924a0c5e38f47c840b
+Source PNG SHA-256: edd1c81a475fab92cdc188b9c6af2be7b5598171546ee01932dfc5ddaec32a1e
+The 32x32 source PNG and RGBA pixels are unchanged. Platform variants are generated
+by scripts/generate-icons.py (Pillow needed only for regeneration).
+This is third-party Minecraft artwork, not original Oxide artwork.
