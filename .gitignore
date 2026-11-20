@@ -3,3 +3,5 @@
 /graphify-out/
 /.local/
 __pycache__/
+/docs/
+/AGENTS.md
