@@ -17,11 +17,11 @@ The classic Minecraft grass-block icon is embedded in Windows executables and ru
 ## Using the launcher
 
 - Enter an offline player name and choose **Install & play**. Names use 1–16 ASCII letters, digits, or underscores.
-- GitHub is checked on startup. Automatic updates are enabled by default and can be disabled in Profile Editor. **Check for updates** checks again; **Install latest** installs the available release. An installed version can still launch when GitHub is unreachable.
+- Game client releases are checked on startup. Automatic client updates are enabled by default and can be disabled in Profile Editor. **Check for updates** checks again; **Install latest** installs the available release. An installed version can still launch when GitHub is unreachable.
 - Settings include an optional offline server, singleplayer server JAR, texture and sound paths, audio mute, smooth lighting, first-person animations, and window dimensions. Leave resource fields empty to use game defaults. Use absolute paths for resources.
 - The game defaults to **854 × 480**. Change **Profile Editor → Game window & audio** to choose another game size. Existing saved sizes are preserved.
 - **Profile Editor → Launcher → Launcher startup width/height** controls the launcher window independently (default **900 × 550**). Changes apply next time the launcher opens. Invalid/incomplete values fall back to the default; valid sizes are 780–4096 wide and 480–4096 high.
-- Windows game processes start without a console window; stdout and stderr still go to `game.log`.
+- **Game Log** appears only while the client is running, displays live stdout and stderr (including partial lines), and follows the newest output. Exiting the client removes the tab and returns to Update Notes if it was selected. The full output remains in `game.log`, which resets on the next launch. Windows game processes start without a console window.
 - Choose to keep the launcher open, minimize it, or hide it while playing. Minimized/hidden launchers return when the child game process exits. Closing a visible launcher leaves the game running.
 - To use a development build, put its absolute executable path in **Profile Editor → Local installation**. Managed installation updates are skipped at startup while this override is active.
 
@@ -39,7 +39,15 @@ Settings are saved after edits and on window close, in the operating system's pe
 
 The visual reference is the local OLauncher codebase (`X:\olauncher`), its base launcher's `LauncherTabPanel` and `BottomBarPanel`, and the [OLauncher news page](https://olauncher.github.io/news/). The layout and CSS colors are recreated with Rust widgets. At the user's request, the news background tiles the real classic launcher dirt texture. Its original 16 × 16 RGB pixels are embedded in `assets/dirt.rgb`; provenance is recorded in `assets/dirt.txt`. It remains third-party Mojang artwork.
 
-The bottom-left username replaces the authenticated profile selector. **Edit Profile** opens all existing Rust launch options, **Check for updates** retains manual release discovery, and the right side shows the offline player and installed version. The bottom bar uses equal-width columns with consistent outer gutters, aligned username actions, a centered Play button, and right-aligned player/version details. The center Play control keeps the existing install, busy, and running states. The news sidebar contains GitHub, [Old School Minecraft](https://oldschoolminecraft.net), and [Discord](https://discord.gg/J3vKjD3). The bottom bar has no offline-play caption or project website button. There are no inactive account/profile controls. **Launcher Log** shows up to 256 session status and error messages; the game's existing `game.log` file remains separate. Settings persistence and save errors remain visible below the launch bar. The previously supplied `assets/logo-placeholder.svg` remains available but is not displayed in this layout.
+The bottom-left username replaces the authenticated profile selector. **Edit Profile** opens all existing Rust launch options, **Check for updates** retains manual release discovery, and the right side shows the offline player and installed version. The bottom bar uses equal-width columns with consistent outer gutters, aligned username actions, a centered Play button, and right-aligned player/version details. The center Play control keeps the existing install, busy, and running states. The news sidebar contains GitHub, [Old School Minecraft](https://oldschoolminecraft.net), and [Discord](https://discord.gg/J3vKjD3). The bottom bar has no offline-play caption or project website button. There are no inactive account/profile controls. **Launcher Log** shows up to 256 session status and error messages; **Game Log** separately displays the running client's `game.log`. Settings persistence and save errors remain visible below the launch bar. The previously supplied `assets/logo-placeholder.svg` remains available but is not displayed in this layout.
+
+## Launcher automatic updates
+
+The launcher independently checks `https://api.github.com/repos/OldSchoolMinecraft/Oxide-Launcher/releases/latest` on startup and when **Check for updates** is clicked. This repository currently has no releases; HTTP 404 is a normal “No newer launcher release published” state and never blocks play. Network failures, rate limits, and invalid packages are reported separately from client updates.
+
+**Profile Editor → Automatically update the launcher** is enabled by default and independent of the client update setting. Updates wait until the client exits; disabling automatic launcher updates still permits checking and manually installing with **Install launcher update**. The installed update takes effect when you close and reopen the launcher, with a persistent status message prompting restart. The launcher does not interrupt the game or restart itself.
+
+Publish stable releases tagged with a semantic version such as `v0.2.0`, newer than `Cargo.toml`'s version. Attach the packages produced by `scripts/package-build.py`: `Oxide-Launcher-v<VERSION>-<OS>-<ARCH>.zip` (Windows/macOS), or `.tar.gz` (Linux). Each platform must have exactly one matching asset. The package contains `oxide-launcher.exe`, `oxide-launcher`, or `Oxide Launcher.app/Contents/MacOS/oxide-launcher` respectively. GitHub's asset `digest` must contain its SHA-256 checksum; missing or mismatched checksums prevent replacement. Downloads use the same size limits and safe extraction as client installs. Linux/Windows replace the executable; macOS replaces the complete app bundle to preserve metadata and signatures. Install into a writable location; permission errors leave the existing launcher available. No live launcher upgrade can be tested until a release is published.
 
 ## GitHub release contract
 
@@ -55,7 +63,7 @@ rust173-aarch64-apple-darwin.tar.gz
 
 Packages may be ZIP or gzip-compressed TAR, with one executable named `rust173`, `rust173-client`, or `hydra-client` (`.exe` for Windows), optionally in a nested folder. Include required runtime resources alongside it; the directory layout is preserved. A Windows `.exe` or extensionless platform-named binary is also supported. Source archives, installers, DMGs, AppImages, and ambiguous multiple platform matches are not selected. Shared library compatibility remains the responsibility of the game release build.
 
-Downloads use HTTPS, enforce the GitHub-reported byte size and SHA-256 digest when GitHub supplies one, and are capped at 512 MiB compressed / 2 GiB unpacked / 20,000 entries. Archive traversal, links, and special files are rejected. Each install is staged into a new directory; the active install manifest changes only after success. Old versions remain available on disk for manual recovery. This updates the **game**, not the launcher binary.
+Downloads use HTTPS, enforce the GitHub-reported byte size and SHA-256 digest when GitHub supplies one, and are capped at 512 MiB compressed / 2 GiB unpacked / 20,000 entries. Archive traversal, links, and special files are rejected. Each install is staged into a new directory; the active install manifest changes only after success. Old versions remain available on disk for manual recovery. This release source updates the **game**. Launcher updates use the separate source below.
 
 ## Development
 
@@ -69,7 +77,8 @@ cargo test
 - `src/ui.rs`: classic tabs, news, launch bar, log, and settings views.
 - `src/chrome.rs`: dark/light palettes and shared classic surface styles.
 - `src/settings.rs`: typed preferences, atomic JSON storage, and game arguments.
-- `src/releases.rs`: GitHub discovery, platform matching, bounded download and extraction.
+- `src/releases.rs`: Client release discovery, platform matching, bounded download and extraction.
+- `src/updater.rs`: Independent launcher release discovery and verified self replacement.
 - `src/landscape.rs`: original launcher dirt texture tiled with Iced Canvas.
 
 Tests cover release-note Markdown structure and styling, refresh/fallback handling, web-link validation, bounded launcher log history, settings replacement, exit-time saves, argument boundaries, game process start/exit, platform selection, executable discovery, and archive traversal. CI checks Linux, Windows, and macOS. Graphify's generated architecture map is local-only and ignored by Git.

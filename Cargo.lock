@@ -2356,6 +2356,8 @@ dependencies = [
  "futures-util",
  "iced",
  "reqwest",
+ "self-replace",
+ "semver",
  "serde",
  "serde_json",
  "sha2",
@@ -2977,6 +2979,17 @@ dependencies = [
  "memmap2",
  "smithay-client-toolkit 0.19.2",
  "tiny-skia",
+]
+
+[[package]]
+name = "self-replace"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "609c5606d9d357b26e4ee1a7a01beac396628d0fa01ebbade2a09cefb88e65af"
+dependencies = [
+ "fastrand",
+ "tempfile",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

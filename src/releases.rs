@@ -43,7 +43,7 @@ impl Installed {
         }
     }
 }
-fn client() -> Result<reqwest::Client, String> {
+pub(crate) fn client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .user_agent("Oxide-Launcher/0.1.0")
         .connect_timeout(Duration::from_secs(15))
@@ -64,7 +64,7 @@ pub async fn latest() -> Result<Release, String> {
         _ => response.error_for_status().map_err(|e| e.to_string())?.json().await.map_err(|e| format!("Invalid release response: {e}")),
     }
 }
-fn asset_matches(name: &str, os: &str, arch: &str) -> bool {
+pub(crate) fn asset_matches(name: &str, os: &str, arch: &str) -> bool {
     let n = name.to_ascii_lowercase();
     let os_match = match os {
         "windows" => n.contains("windows") || n.contains("pc-windows"),
@@ -102,52 +102,10 @@ pub fn compatible_asset(release: &Release) -> Result<Asset, String> {
 }
 pub async fn install(release: Release, data: PathBuf) -> Result<Installed, String> {
     let asset = compatible_asset(&release)?;
-    if asset.size > MAX_DOWNLOAD {
-        return Err("Release download exceeds the 512 MiB limit.".into());
-    }
-    let url = reqwest::Url::parse(&asset.browser_download_url).map_err(|e| e.to_string())?;
-    if url.scheme() != "https"
-        || url.host_str() != Some("github.com")
-        || !url.path().starts_with("/LeowFlow/Oxide/releases/download/")
-    {
-        return Err("Unexpected release download URL.".into());
-    }
     fs::create_dir_all(&data).map_err(|e| e.to_string())?;
     let stage = tempfile::tempdir_in(&data).map_err(|e| e.to_string())?;
     let download = stage.path().join("download");
-    let response = client()?
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .error_for_status()
-        .map_err(|e| e.to_string())?;
-    let mut stream = response.bytes_stream();
-    let mut file = tokio::fs::File::create(&download)
-        .await
-        .map_err(|e| e.to_string())?;
-    let mut hash = Sha256::new();
-    let mut total = 0u64;
-    use tokio::io::AsyncWriteExt;
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| e.to_string())?;
-        total += chunk.len() as u64;
-        if total > MAX_DOWNLOAD {
-            return Err("Release download is too large.".into());
-        }
-        hash.update(&chunk);
-        file.write_all(&chunk).await.map_err(|e| e.to_string())?;
-    }
-    file.sync_all().await.map_err(|e| e.to_string())?;
-    drop(file);
-    if total != asset.size {
-        return Err("Incomplete release download. Please retry.".into());
-    }
-    if let Some(digest) = &asset.digest
-        && digest != &format!("sha256:{:x}", hash.finalize())
-    {
-        return Err("Release checksum verification failed.".into());
-    }
+    download_asset(&asset, "LeowFlow/Oxide", &download).await?;
     tokio::task::spawn_blocking(move || {
         let root = stage.path().join("game");
         fs::create_dir(&root).map_err(|e| e.to_string())?;
@@ -191,6 +149,59 @@ pub async fn install(release: Release, data: PathBuf) -> Result<Installed, Strin
     .await
     .map_err(|e| e.to_string())?
 }
+pub(crate) async fn download_asset(
+    asset: &Asset,
+    repository: &str,
+    download: &Path,
+) -> Result<(), String> {
+    if asset.size > MAX_DOWNLOAD {
+        return Err("Release download exceeds the 512 MiB limit.".into());
+    }
+    let url = reqwest::Url::parse(&asset.browser_download_url).map_err(|e| e.to_string())?;
+    if url.scheme() != "https"
+        || url.host_str() != Some("github.com")
+        || !url
+            .path()
+            .starts_with(&format!("/{repository}/releases/download/"))
+    {
+        return Err("Unexpected release download URL.".into());
+    }
+    let response = client()?
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())?;
+    let mut stream = response.bytes_stream();
+    let mut file = tokio::fs::File::create(&download)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut hash = Sha256::new();
+    let mut total = 0u64;
+    use tokio::io::AsyncWriteExt;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| e.to_string())?;
+        total += chunk.len() as u64;
+        if total > MAX_DOWNLOAD {
+            return Err("Release download is too large.".into());
+        }
+        hash.update(&chunk);
+        file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+    }
+    file.sync_all().await.map_err(|e| e.to_string())?;
+    drop(file);
+    if total != asset.size {
+        return Err("Incomplete release download. Please retry.".into());
+    }
+    if let Some(digest) = &asset.digest
+        && digest != &format!("sha256:{:x}", hash.finalize())
+    {
+        return Err("Release checksum verification failed.".into());
+    }
+    Ok(())
+}
+
 fn safe_relative(path: &Path) -> bool {
     !path.as_os_str().is_empty()
         && path
@@ -210,7 +221,7 @@ fn copy_entry(mut reader: impl Read, target: &Path, budget: &mut u64) -> Result<
     *budget -= copied;
     output.flush().map_err(|e| e.to_string())
 }
-fn unpack(download: &Path, name: &str, root: &Path) -> Result<(), String> {
+pub(crate) fn unpack(download: &Path, name: &str, root: &Path) -> Result<(), String> {
     let mut budget = MAX_UNPACKED;
     if name.ends_with(".zip") {
         let mut archive =

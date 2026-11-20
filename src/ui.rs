@@ -22,26 +22,27 @@ pub(super) fn parse_release_notes(body: Option<&str>) -> Vec<markdown::Item> {
 impl App {
     pub(super) fn view(&self) -> Element<'_, Message> {
         // LauncherTabPanel: compact system tabs above the content, not a toolbar.
-        let tabs = container(
-            row![
-                self.page_tab("Update Notes", Page::Play),
-                self.page_tab("Launcher Log", Page::Log),
-                self.page_tab("Profile Editor", Page::Settings),
-            ]
-            .spacing(2)
-            .align_y(iced::Bottom),
-        )
-        .padding(iced::Padding {
-            top: 2.,
-            right: 4.,
-            bottom: 0.,
-            left: 4.,
-        })
-        .width(Fill)
-        .style(chrome::shell);
+        let mut tab_row = row![
+            self.page_tab("Update Notes", Page::Play),
+            self.page_tab("Launcher Log", Page::Log),
+        ];
+        if self.child.is_some() {
+            tab_row = tab_row.push(self.page_tab("Game Log", Page::GameLog));
+        }
+        tab_row = tab_row.push(self.page_tab("Profile Editor", Page::Settings));
+        let tabs = container(tab_row.spacing(2).align_y(iced::Bottom))
+            .padding(iced::Padding {
+                top: 2.,
+                right: 4.,
+                bottom: 0.,
+                left: 4.,
+            })
+            .width(Fill)
+            .style(chrome::shell);
         let content = match self.page {
             Page::Play => self.play_view(),
             Page::Log => self.log_view(),
+            Page::GameLog => self.game_log_view(),
             Page::Settings => container(self.settings_view())
                 .padding(10)
                 .height(Fill)
@@ -64,7 +65,11 @@ impl App {
         body = body.push(
             container(
                 row![
-                    text(&self.status).size(11).width(Fill),
+                    column![
+                        text(&self.status).size(11),
+                        text(&self.launcher_update_status).size(11)
+                    ]
+                    .width(Fill),
                     text(if self.dirty.is_some() {
                         "Saving settings…"
                     } else if self.save_error.is_some() {
@@ -107,14 +112,15 @@ impl App {
         };
         let title = if self.child.is_some() {
             "Game running"
-        } else if self.busy {
+        } else if self.busy || self.launcher_updating {
             "Please wait…"
         } else if self.installed.is_none() && self.settings.executable.trim().is_empty() {
             "Install & Play"
         } else {
             "Play"
         };
-        let enabled = !self.busy
+        let enabled = !self.launcher_updating
+            && !self.busy
             && self.child.is_none()
             && (self.installed.is_some()
                 || !self.settings.executable.trim().is_empty()
@@ -293,6 +299,23 @@ impl App {
             .into()
     }
 
+    fn game_log_view(&self) -> Element<'_, Message> {
+        container(
+            scrollable(
+                text(String::from_utf8_lossy(&self.game_log).into_owned())
+                    .size(12)
+                    .font(Font::MONOSPACE),
+            )
+            .anchor_bottom()
+            .height(Fill),
+        )
+        .padding(6)
+        .width(Fill)
+        .height(Fill)
+        .style(chrome::inset)
+        .into()
+    }
+
     fn settings_view(&self) -> Element<'_, Message> {
         let muted = chrome::muted(&self.theme());
         let appearance = column![
@@ -338,9 +361,18 @@ impl App {
             .align_y(iced::Center)
             .spacing(12),
             checkbox(self.settings.auto_update)
-                .label("Automatically install new GitHub releases")
+                .label("Automatically install game client releases")
                 .on_toggle(Message::AutoUpdate),
-            text("Checks on startup. Installs updates while the game is closed.")
+            checkbox(self.settings.launcher_auto_update)
+                .label("Automatically update the launcher")
+                .on_toggle(Message::LauncherAutoUpdate),
+            text(format!("Launcher {} · {}", env!("CARGO_PKG_VERSION"), self.launcher_update_status))
+                .size(12).color(muted),
+            button(text("Install launcher update").size(12))
+                .style(chrome::control)
+                .on_press_maybe((self.launcher_update.is_some() && !self.launcher_updating && self.child.is_none())
+                    .then_some(Message::UpdateLauncher)),
+            text("Checks on startup. Updates install while the game is closed. Launcher updates take effect after restart.")
                 .size(12)
                 .color(muted),
         ]

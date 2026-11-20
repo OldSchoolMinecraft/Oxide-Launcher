@@ -77,6 +77,7 @@ pub struct Settings {
     pub animation: Animation,
     pub visibility: Visibility,
     pub auto_update: bool,
+    pub launcher_auto_update: bool,
     pub dark_mode: bool,
 }
 impl Default for Settings {
@@ -97,6 +98,7 @@ impl Default for Settings {
             animation: Animation::default(),
             visibility: Visibility::default(),
             auto_update: true,
+            launcher_auto_update: true,
             dark_mode: true,
         }
     }

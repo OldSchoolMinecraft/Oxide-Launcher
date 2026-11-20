@@ -4,6 +4,7 @@ mod landscape;
 mod releases;
 mod settings;
 mod ui;
+mod updater;
 
 use iced::{Subscription, Task, Theme, window};
 use releases::{Installed, Release};
@@ -53,6 +54,7 @@ fn main() -> iced::Result {
 enum Page {
     Play,
     Log,
+    GameLog,
     Settings,
 }
 #[derive(Debug, Clone, Copy)]
@@ -77,6 +79,10 @@ enum Message {
     Animation(Animation),
     Mute(bool),
     AutoUpdate(bool),
+    LauncherAutoUpdate(bool),
+    LauncherChecked(Result<Option<Release>, String>),
+    UpdateLauncher,
+    LauncherUpdated(Result<String, String>),
     DarkMode(bool),
     Check,
     Checked(Result<Release, String>),
@@ -104,6 +110,13 @@ struct App {
     save_error: Option<String>,
     dirty: Option<Instant>,
     child: Option<Child>,
+    game_log_reader: Option<fs::File>,
+    game_log: Vec<u8>,
+    launcher_update: Option<Release>,
+    launcher_updating: bool,
+    launcher_checking: bool,
+    launcher_updated: bool,
+    launcher_update_status: String,
     window: Option<window::Id>,
     launch_after_install: bool,
     active_visibility: Visibility,
@@ -117,7 +130,7 @@ impl App {
             .and_then(|p| Settings::load(&p.config));
         let error = loaded.as_ref().err().cloned();
         let installed = paths.as_ref().ok().and_then(|p| Installed::load(&p.data));
-        let app = Self {
+        let mut app = Self {
             paths,
             settings: loaded.unwrap_or_default(),
             page: Page::Play,
@@ -133,14 +146,24 @@ impl App {
             save_error: None,
             dirty: None,
             child: None,
+            game_log_reader: None,
+            game_log: Vec::new(),
+            launcher_update: None,
+            launcher_updating: false,
+            launcher_checking: false,
+            launcher_updated: false,
+            launcher_update_status: String::new(),
             window: None,
             launch_after_install: false,
             active_visibility: Visibility::KeepOpen,
         };
+        app.launcher_checking = true;
+        app.launcher_update_status = "Checking for launcher updates…".into();
         (
             app,
             Task::batch([
                 Task::perform(releases::latest(), Message::Checked),
+                Task::perform(updater::latest(), Message::LauncherChecked),
                 window::latest().map(Message::Window),
             ]),
         )
@@ -180,10 +203,13 @@ impl App {
             self.status.clone(),
             self.error.clone(),
             self.save_error.clone(),
+            self.launcher_update_status.clone(),
         );
         let task = self.update_inner(message);
         for line in [
             (self.status != previous.0).then(|| format!("[INFO] {}", self.status)),
+            (self.launcher_update_status != previous.3)
+                .then(|| format!("[INFO] {}", self.launcher_update_status)),
             (self.error != previous.1)
                 .then(|| self.error.as_ref().map(|e| format!("[ERROR] {e}")))
                 .flatten(),
@@ -195,16 +221,20 @@ impl App {
         .flatten()
         {
             self.launcher_log.push_back(line);
-            while self.launcher_log.len() > 256 {
-                self.launcher_log.pop_front();
-            }
+        }
+        while self.launcher_log.len() > 256 {
+            self.launcher_log.pop_front();
         }
         task
     }
     fn update_inner(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Page(page) => {
-                self.page = page;
+                self.page = if page == Page::GameLog && self.child.is_none() {
+                    Page::Play
+                } else {
+                    page
+                };
                 if self.dirty.is_some() {
                     self.save();
                 }
@@ -249,11 +279,69 @@ impl App {
                 self.settings.auto_update = v;
                 self.save();
             }
+            Message::LauncherAutoUpdate(enabled) => {
+                self.settings.launcher_auto_update = enabled;
+                self.save();
+                if enabled {
+                    return self.update_inner(Message::UpdateLauncher);
+                }
+            }
+            Message::LauncherChecked(result) => {
+                self.launcher_checking = false;
+                match result {
+                    Ok(Some(release)) => {
+                        self.launcher_update_status =
+                            format!("Launcher {} available.", release.tag_name);
+                        self.launcher_update = Some(release);
+                        if self.settings.launcher_auto_update {
+                            return self.update_inner(Message::UpdateLauncher);
+                        }
+                    }
+                    Ok(None) => {
+                        self.launcher_update = None;
+                        self.launcher_update_status = "No newer launcher release published.".into();
+                    }
+                    Err(error) => {
+                        self.launcher_update_status =
+                            format!("Launcher update check unavailable: {error}")
+                    }
+                }
+            }
+            Message::UpdateLauncher
+                if !self.launcher_updating && !self.launcher_updated && self.child.is_none() =>
+            {
+                if let Some(release) = self.launcher_update.clone() {
+                    self.launcher_updating = true;
+                    self.launcher_update_status =
+                        format!("Installing launcher {}…", release.tag_name);
+                    return Task::perform(updater::install(release), Message::LauncherUpdated);
+                }
+            }
+            Message::LauncherUpdated(result) => {
+                self.launcher_updating = false;
+                self.launcher_update_status = match result {
+                    Ok(tag) => {
+                        self.launcher_updated = true;
+                        self.launcher_update = None;
+                        format!("Launcher {tag} installed. Restart the launcher to use it.")
+                    }
+                    Err(error) => format!("Launcher update failed: {error}"),
+                };
+            }
             Message::Check if !self.busy => {
                 self.busy = true;
                 self.error = None;
                 self.status = "Checking GitHub for the latest release…".into();
-                return Task::perform(releases::latest(), Message::Checked);
+                let game = Task::perform(releases::latest(), Message::Checked);
+                if !self.launcher_checking && !self.launcher_updating && !self.launcher_updated {
+                    self.launcher_checking = true;
+                    self.launcher_update_status = "Checking for launcher updates…".into();
+                    return Task::batch([
+                        game,
+                        Task::perform(updater::latest(), Message::LauncherChecked),
+                    ]);
+                }
+                return game;
             }
             Message::Checked(result) => {
                 self.busy = false;
@@ -310,7 +398,7 @@ impl App {
                     }
                 }
             }
-            Message::Play if self.child.is_none() && !self.busy => {
+            Message::Play if self.child.is_none() && !self.busy && !self.launcher_updating => {
                 if self.settings.executable.trim().is_empty() && self.installed.is_none() {
                     return self.update_inner(Message::Install(true));
                 }
@@ -323,10 +411,12 @@ impl App {
                 {
                     self.save();
                 }
+                self.read_game_log(false);
                 if let Some(child) = &mut self.child {
                     match child.try_wait() {
                         Ok(Some(exit)) => {
                             self.child = None;
+                            self.finish_game_log();
                             self.status = if exit.success() {
                                 "Game closed.".into()
                             } else {
@@ -334,11 +424,19 @@ impl App {
                                     "Game exited with {exit}. See game.log in the launcher data directory."
                                 )
                             };
-                            return self.restore();
+                            let restore = self.restore();
+                            if self.settings.launcher_auto_update {
+                                return Task::batch([
+                                    restore,
+                                    self.update_inner(Message::UpdateLauncher),
+                                ]);
+                            }
+                            return restore;
                         }
                         Err(e) => {
                             self.error = Some(format!("Could not monitor game: {e}"));
                             self.child = None;
+                            self.finish_game_log();
                             return self.restore();
                         }
                         Ok(None) => {}
@@ -366,7 +464,10 @@ impl App {
         Task::none()
     }
     fn launch(&mut self) -> Task<Message> {
-        let result = (|| -> Result<Child, String> {
+        if self.launcher_updating {
+            return Task::none();
+        }
+        let result = (|| -> Result<(Child, fs::File), String> {
             let args = self.settings.arguments()?;
             let paths = self.paths.as_ref().map_err(Clone::clone)?;
             fs::create_dir_all(&paths.data).map_err(|e| e.to_string())?;
@@ -389,7 +490,8 @@ impl App {
             let game_dir = paths.data.join("game");
             fs::create_dir_all(&game_dir).map_err(|e| e.to_string())?;
             let log = fs::File::create(paths.data.join("game.log")).map_err(|e| e.to_string())?;
-            game_command(&executable)
+            let reader = fs::File::open(paths.data.join("game.log")).map_err(|e| e.to_string())?;
+            let child = game_command(&executable)
                 .args(args)
                 .env("HYDRA_HOME", &game_dir)
                 .current_dir(&game_dir)
@@ -397,12 +499,15 @@ impl App {
                 .stdout(log.try_clone().map_err(|e| e.to_string())?)
                 .stderr(log)
                 .spawn()
-                .map_err(|e| format!("Could not start {}: {e}", executable.display()))
+                .map_err(|e| format!("Could not start {}: {e}", executable.display()))?;
+            Ok((child, reader))
         })();
         match result {
-            Ok(child) => {
+            Ok((child, reader)) => {
                 self.save();
                 self.child = Some(child);
+                self.game_log.clear();
+                self.game_log_reader = Some(reader);
                 self.error = None;
                 self.status = "Oxide is running.".into();
                 self.active_visibility = self.settings.visibility;
@@ -417,6 +522,23 @@ impl App {
             Err(e) => self.error = Some(e),
         }
         Task::none()
+    }
+    fn read_game_log(&mut self, finished: bool) {
+        use std::io::Read;
+        if let Some(reader) = &mut self.game_log_reader {
+            let limit = if finished { u64::MAX } else { 256 * 1024 };
+            if let Err(error) = reader.take(limit).read_to_end(&mut self.game_log) {
+                self.error = Some(format!("Could not read game.log: {error}"));
+                self.game_log_reader = None;
+            }
+        }
+    }
+    fn finish_game_log(&mut self) {
+        self.read_game_log(true);
+        self.game_log_reader = None;
+        if self.page == Page::GameLog {
+            self.page = Page::Play;
+        }
     }
     fn restore(&self) -> Task<Message> {
         if let Some(id) = self.window {
@@ -539,6 +661,13 @@ mod tests {
             save_error: None,
             dirty: None,
             child: None,
+            game_log_reader: None,
+            game_log: Vec::new(),
+            launcher_update: None,
+            launcher_updating: false,
+            launcher_checking: false,
+            launcher_updated: false,
+            launcher_update_status: String::new(),
             window: None,
             launch_after_install: false,
             active_visibility: Visibility::KeepOpen,
@@ -632,6 +761,75 @@ mod tests {
         assert_eq!(app.launcher_log.len(), 256);
     }
 
+    #[test]
+    fn launcher_empty_feed_and_opt_out_leave_play_available() {
+        let root = tempfile::tempdir().unwrap();
+        let mut app = isolated_app(root.path());
+        app.settings.launcher_auto_update = false;
+        let _ = app.update(Message::LauncherChecked(Ok(None)));
+        assert!(!app.launcher_updating);
+        assert!(app.error.is_none());
+        let _ = app.update(Message::LauncherChecked(Ok(Some(Release {
+            tag_name: "v99.0.0".into(),
+            body: None,
+            assets: vec![],
+        }))));
+        assert!(app.launcher_update.is_some());
+        assert!(!app.launcher_updating);
+        let _ = app.update(Message::UpdateLauncher);
+        assert!(app.launcher_updating);
+        let _ = app.update(Message::LauncherUpdated(Ok("v99.0.0".into())));
+        assert!(!app.launcher_updating);
+        assert!(app.launcher_updated);
+        assert!(app.launcher_update_status.contains("Restart"));
+    }
+    #[cfg(unix)]
+    #[test]
+    fn game_log_is_live_includes_partial_output_and_closes_with_client() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let game = root.path().join("fake-client");
+        fs::write(&game, "#!/bin/sh\nprintf 'hello \\342\\230\\203'\nprintf 'stderr' >&2\ncount=0\nwhile [ ! -f done ] && [ $count -lt 500 ]; do sleep 0.01; count=$((count+1)); done\nprintf 'final'\n").unwrap();
+        fs::set_permissions(&game, fs::Permissions::from_mode(0o755)).unwrap();
+        let mut app = isolated_app(root.path());
+        app.settings.executable = game.to_string_lossy().into_owned();
+        let _ = app.update(Message::Page(Page::GameLog));
+        assert_eq!(app.page, Page::Play);
+        let _ = app.update(Message::Play);
+        let _ = app.update(Message::Page(Page::GameLog));
+        assert_eq!(app.page, Page::GameLog);
+        let _ = app.update(Message::LauncherChecked(Ok(Some(Release {
+            tag_name: "v99.0.0".into(),
+            body: None,
+            assets: vec![],
+        }))));
+        assert!(
+            !app.launcher_updating,
+            "Updates must wait for the running client"
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !String::from_utf8_lossy(&app.game_log).contains("stderr") {
+            let _ = app.update(Message::Tick);
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(String::from_utf8_lossy(&app.game_log).contains("hello ☃"));
+        assert!(app.child.is_some());
+        fs::write(root.path().join("data/game/done"), "").unwrap();
+        app.child.as_mut().unwrap().wait().unwrap();
+        let _ = app.update(Message::Tick);
+        assert!(app.child.is_none());
+        assert_eq!(app.page, Page::Play);
+        assert!(String::from_utf8_lossy(&app.game_log).ends_with("final"));
+        assert!(
+            app.launcher_updating,
+            "The pending update starts after client exit"
+        );
+        assert_eq!(
+            app.game_log,
+            fs::read(root.path().join("data/game.log")).unwrap()
+        );
+    }
     #[test]
     fn failed_launch_keeps_launcher_available() {
         let root = tempfile::tempdir().unwrap();
