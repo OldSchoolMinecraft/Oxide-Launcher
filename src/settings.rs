@@ -42,23 +42,6 @@ impl fmt::Display for Lighting {
         })
     }
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum Animation {
-    Vanilla,
-    #[default]
-    Hydra,
-}
-impl Animation {
-    pub const ALL: [Self; 2] = [Self::Hydra, Self::Vanilla];
-}
-impl fmt::Display for Animation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Vanilla => "Vanilla",
-            Self::Hydra => "Hydra",
-        })
-    }
-}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -74,7 +57,6 @@ pub struct Settings {
     pub launcher_height: String,
     pub mute: bool,
     pub lighting: Lighting,
-    pub animation: Animation,
     pub visibility: Visibility,
     pub auto_update: bool,
     pub launcher_auto_update: bool,
@@ -95,7 +77,6 @@ impl Default for Settings {
             launcher_height: "550".into(),
             mute: false,
             lighting: Lighting::default(),
-            animation: Animation::default(),
             visibility: Visibility::default(),
             auto_update: true,
             launcher_auto_update: true,
@@ -161,10 +142,6 @@ impl Settings {
                 (self.lighting == Lighting::On).to_string(),
             ]);
         }
-        args.extend([
-            "--animation-preset".into(),
-            self.animation.to_string().to_lowercase(),
-        ]);
         Ok(args)
     }
 }
@@ -217,7 +194,15 @@ mod tests {
     }
     #[test]
     fn old_settings_default_to_dark_mode() {
-        let settings: Settings = serde_json::from_str(r#"{"username":"Steve"}"#).unwrap();
+        let settings: Settings =
+            serde_json::from_str(r#"{"username":"Steve","animation":"Hydra"}"#).unwrap();
+        assert!(
+            !settings
+                .arguments()
+                .unwrap()
+                .iter()
+                .any(|arg| arg == "--animation-preset")
+        );
         assert!(settings.dark_mode);
         assert_eq!(settings.username, "Steve");
     }

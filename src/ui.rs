@@ -1,7 +1,7 @@
 //! Classic launcher proportions with native Rust controls and offline access.
 use crate::{
     App, Field, Message, Page, chrome, landscape,
-    settings::{Animation, Lighting, Visibility},
+    settings::{Lighting, Visibility},
 };
 use iced::{
     Element, Fill, Font,
@@ -420,29 +420,16 @@ impl App {
                 )
             ]
             .spacing(16),
-            row![
-                column![
-                    text("Smooth lighting").size(12),
-                    pick_list(
-                        Lighting::ALL,
-                        Some(self.settings.lighting),
-                        Message::Lighting
-                    )
-                ]
-                .spacing(6)
-                .width(Fill),
-                column![
-                    text("First-person animations").size(12),
-                    pick_list(
-                        Animation::ALL,
-                        Some(self.settings.animation),
-                        Message::Animation
-                    )
-                ]
-                .spacing(6)
-                .width(Fill)
+            column![
+                text("Smooth lighting").size(12),
+                pick_list(
+                    Lighting::ALL,
+                    Some(self.settings.lighting),
+                    Message::Lighting
+                )
             ]
-            .spacing(16),
+            .spacing(6)
+            .width(Fill),
             checkbox(self.settings.mute)
                 .label("Mute game audio")
                 .on_toggle(Message::Mute),

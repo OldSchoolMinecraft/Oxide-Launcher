@@ -8,7 +8,7 @@ mod updater;
 
 use iced::{Subscription, Task, Theme, window};
 use releases::{Installed, Release};
-use settings::{Animation, Lighting, Paths, Settings, Visibility};
+use settings::{Lighting, Paths, Settings, Visibility};
 use std::{
     fs,
     path::PathBuf,
@@ -76,7 +76,6 @@ enum Message {
     Edit(Field, String),
     Visibility(Visibility),
     Lighting(Lighting),
-    Animation(Animation),
     Mute(bool),
     AutoUpdate(bool),
     LauncherAutoUpdate(bool),
@@ -261,10 +260,6 @@ impl App {
             }
             Message::Lighting(v) => {
                 self.settings.lighting = v;
-                self.save();
-            }
-            Message::Animation(v) => {
-                self.settings.animation = v;
                 self.save();
             }
             Message::Mute(v) => {
