@@ -167,7 +167,7 @@ impl App {
         let account = column![
             text(format!("Welcome, {}", self.settings.username)).size(12),
             text("Minecraft Beta 1.7.3").size(11),
-            text(version).size(11),
+            text(format!("Client version: {}", version)).size(11),
         ]
         .spacing(4)
         .width(Fill)
