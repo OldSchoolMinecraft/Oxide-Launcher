@@ -9,4 +9,4 @@ Oxide Launcher installs, updates, and runs Oxide, our Rust port of Minecraft Bet
 - **Logging**: Easy access to client logs for bug reports.
 
 > [!NOTE]
-> Development is AI assisted but the final product is reviewed and tested by experienced human programmers.
+> AI was used heavily while developing this software.
