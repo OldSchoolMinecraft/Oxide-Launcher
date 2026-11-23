@@ -1,7 +1,7 @@
 
 # Oxide Launcher
 
-Oxide Launcher installs, updates, and runs Oxide, our Rust port of Minecraft Beta 1.7.3.
+Oxide Launcher installs, updates, and runs [Oxide](https://github.com/OldSchoolMinecraft/Oxide), our Rust port of Minecraft Beta 1.7.3.
 
 Available for **Windows, macOS, and Linux**.
 
