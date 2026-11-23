@@ -26,7 +26,10 @@ DESKTOP = "dev.oxide.launcher.desktop"
 
 
 def command(*args, cwd=ROOT):
-    return subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True, timeout=30).stdout.strip()
+    result = subprocess.run(
+        args, cwd=cwd, check=True, capture_output=True, text=True, timeout=30
+    )
+    return result.stdout.strip()
 
 
 def sha256(path):
@@ -34,19 +37,28 @@ def sha256(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def archive_name(platform, version):
+    suffix = ".tar.gz" if platform.startswith("linux") else ".zip"
+    return f"Oxide-Launcher-v{version}-{platform}{suffix}"
+
+
 def verify_native_header(data, platform):
     if platform.startswith("windows"):
         if data[:2] != b"MZ" or len(data) < 64:
             raise ValueError("Expected a Windows executable")
         offset = struct.unpack_from("<I", data, 0x3c)[0]
-        if data[offset:offset+4] != b"PE\x00\x00" or struct.unpack_from("<H", data, offset+4)[0] != 0x8664:
+        if (
+            len(data) < offset + 6
+            or data[offset:offset + 4] != b"PE\x00\x00"
+            or struct.unpack_from("<H", data, offset + 4)[0] != 0x8664
+        ):
             raise ValueError("Expected a Windows x86_64 executable")
     elif platform.startswith("linux"):
-        if data[:6] != b"\x7fELF\x02\x01" or struct.unpack_from("<H", data, 18)[0] != 62:
+        if len(data) < 20 or data[:6] != b"\x7fELF\x02\x01" or struct.unpack_from("<H", data, 18)[0] != 62:
             raise ValueError("Expected a Linux x86_64 executable")
     else:
         cpu = 0x0100000c if platform.endswith("aarch64") else 0x01000007
-        if data[:4] != b"\xcf\xfa\xed\xfe" or struct.unpack_from("<I", data, 4)[0] != cpu:
+        if len(data) < 8 or data[:4] != b"\xcf\xfa\xed\xfe" or struct.unpack_from("<I", data, 4)[0] != cpu:
             raise ValueError("Expected the matching native Mac executable")
 
 
@@ -174,7 +186,7 @@ macOS: 12 or newer. Mac/Linux desktop GUI validation remains outstanding.
 Windows: 64-bit Windows with compatible system graphics drivers.
 
 Game downloads: https://github.com/LeowFlow/Oxide
-Launcher source: https://github.com/moderatorman/Rust173-Launcher
+Launcher source: https://github.com/OldSchoolMinecraft/Oxide-Launcher
 The Minecraft grass-block icon is Mojang artwork.
 Not affiliated with Mojang or Microsoft.
 """
@@ -219,8 +231,7 @@ def main():
             if platform.startswith("linux"):
                 linux_desktop_files(stage)
         (stage / "README.txt").write_text(readme(version, platform), encoding="utf-8", newline="\n")
-        extension = ".tar.gz" if platform.startswith("linux") else ".zip"
-        archive = public / f"Oxide-Launcher-v{version}-{platform}{extension}"
+        archive = public / archive_name(platform, version)
         make_archive(stage, archive, executable)
         if verify_archive(archive, platform, version) != sha256(executable):
             raise ValueError("Packaged executable hash mismatch")

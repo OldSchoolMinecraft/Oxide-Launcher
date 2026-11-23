@@ -1,6 +1,0 @@
-Minecraft classic launcher dirt texture (Mojang).
-Source: dirt.png from the original launcher.jar referenced by the supplied OLauncher distribution.
-Source JAR SHA-1: eabbff5ff8e21250e33670924a0c5e38f47c840b
-Source PNG SHA-256: e001d2a595177c4dce06cdc13ca4a87b4e954ea6339c6859736682aeaaab135e
-Format: 16 x 16, RGB8, row-major. Pixels are unchanged; no procedural substitute.
-Included at the user's explicit request. This is third-party Minecraft artwork, not an original Oxide asset.

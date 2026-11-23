@@ -1,0 +1,4 @@
+Stone background tile supplied by the user as bg.gif.
+Source GIF SHA-256: 78139c3f7172f688a4e345c0ff15a1895752248ae57a3a5b3cad2ef4ef7dd944
+Decoded RGBA SHA-256: b43db2908680fc035b45ce101c524d274112ccc2247be1c100a3461cca9af8b4
+Format: 48 × 48, RGBA8, row-major. Pixels were decoded without scaling or recoloring.

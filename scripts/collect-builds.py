@@ -6,24 +6,25 @@ from pathlib import Path
 import shutil
 import tomllib
 
-spec = importlib.util.spec_from_file_location("packaging", Path(__file__).with_name("package-build.py"))
-packaging = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(packaging)
+spec = importlib.util.spec_from_file_location(
+    "package_build", Path(__file__).with_name("package-build.py")
+)
+package_build = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(package_build)
 
 
 def collect(downloads, destination, version):
     if destination.exists():
         raise ValueError("Refusing to replace existing collected packages")
     archives = []
-    for platform in packaging.TARGETS.values():
-        extension = ".tar.gz" if platform.startswith("linux") else ".zip"
-        name = f"Oxide-Launcher-v{version}-{platform}{extension}"
+    for platform in package_build.TARGETS.values():
+        name = package_build.archive_name(platform, version)
         root = downloads / ("launcher-" + platform)
         path = root / name
-        digest = packaging.sha256(path)
+        digest = package_build.sha256(path)
         if (root / "SHA256SUMS.txt").read_text(encoding="ascii").strip() != f"{digest}  {name}":
             raise ValueError("Checksum mismatch: " + name)
-        packaging.verify_archive(path, platform, version)
+        package_build.verify_archive(path, platform, version)
         archives.append((path, digest))
     destination.mkdir(parents=True)
     for path, _ in archives:
@@ -38,6 +39,7 @@ if __name__ == "__main__":
     parser.add_argument("downloads", type=Path)
     parser.add_argument("destination", type=Path)
     args = parser.parse_args()
-    version = tomllib.loads((packaging.ROOT / "Cargo.toml").read_text())["package"]["version"]
+    manifest = (package_build.ROOT / "Cargo.toml").read_text(encoding="utf-8")
+    version = tomllib.loads(manifest)["package"]["version"]
     for path, digest in collect(args.downloads, args.destination, version):
         print(f"{digest}  {path.name}")

@@ -4,6 +4,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub(crate) const DEFAULT_WINDOW_SIZE: (u32, u32) = (900, 550);
+pub(crate) const MIN_WINDOW_SIZE: (u32, u32) = (780, 480);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Visibility {
     #[default]
@@ -65,7 +68,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            username: "Hydra_Explorer".into(),
+            username: String::new(),
             server: String::new(),
             singleplayer_server: String::new(),
             assets: String::new(),
@@ -73,8 +76,8 @@ impl Default for Settings {
             executable: String::new(),
             width: "854".into(),
             height: "480".into(),
-            launcher_width: "900".into(),
-            launcher_height: "550".into(),
+            launcher_width: DEFAULT_WINDOW_SIZE.0.to_string(),
+            launcher_height: DEFAULT_WINDOW_SIZE.1.to_string(),
             mute: false,
             lighting: Lighting::default(),
             visibility: Visibility::default(),
@@ -100,16 +103,24 @@ impl Settings {
     pub fn launcher_size(&self) -> Option<(u32, u32)> {
         let width = self.launcher_width.trim().parse().ok()?;
         let height = self.launcher_height.trim().parse().ok()?;
-        ((780..=4096).contains(&width) && (480..=4096).contains(&height)).then_some((width, height))
+        ((MIN_WINDOW_SIZE.0..=4096).contains(&width)
+            && (MIN_WINDOW_SIZE.1..=4096).contains(&height))
+        .then_some((width, height))
     }
-    pub fn arguments(&self) -> Result<Vec<String>, String> {
+    pub fn player_name(&self) -> Option<&str> {
         let name = self.username.trim();
-        if name.is_empty()
-            || name.len() > 16
-            || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-        {
-            return Err("Username must be 1–16 letters, numbers, or underscores.".into());
-        }
+        (!name.is_empty()
+            && name.len() <= 16
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'))
+        .then_some(name)
+    }
+
+    pub fn arguments(&self) -> Result<Vec<String>, String> {
+        let name = self
+            .player_name()
+            .ok_or("Username must be 1–16 letters, numbers, or underscores.")?;
         for (label, value) in [("Width", &self.width), ("Height", &self.height)] {
             if !value.parse::<u32>().is_ok_and(|v| (64..=4096).contains(&v)) {
                 return Err(format!("{label} must be between 64 and 4096."));
@@ -245,6 +256,7 @@ mod tests {
     #[test]
     fn arguments_preserve_paths_and_negative_validation() {
         let mut s = Settings {
+            username: "Steve".into(),
             assets: "/a path/game.zip".into(),
             ..Settings::default()
         };

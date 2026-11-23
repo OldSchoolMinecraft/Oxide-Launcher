@@ -1,5 +1,8 @@
 //! Independent launcher updates. An empty GitHub repository is a normal state.
-use crate::releases::{self, Asset, Release};
+use crate::{
+    archive,
+    github::{self, Asset, Release},
+};
 use semver::Version;
 use std::{fs, path::Path};
 
@@ -13,10 +16,7 @@ pub async fn latest() -> Result<Option<Release>, String> {
 }
 
 async fn latest_from(url: &str) -> Result<Option<Release>, String> {
-    let response = releases::client()?
-        .get(url)
-        .header("Accept", "application/vnd.github+json")
-        .send()
+    let response = github::get(url)
         .await
         .map_err(|e| format!("Launcher update check failed: {e}"))?;
     if response.status() == reqwest::StatusCode::NOT_FOUND {
@@ -48,7 +48,7 @@ fn asset(release: &Release) -> Result<Asset, String> {
         .iter()
         .filter(|a| {
             a.name.to_ascii_lowercase().starts_with("oxide-launcher-")
-                && releases::asset_matches(&a.name, std::env::consts::OS, std::env::consts::ARCH)
+                && github::asset_matches(&a.name, std::env::consts::OS, std::env::consts::ARCH)
         })
         .collect();
     match matches.as_slice() {
@@ -70,25 +70,18 @@ pub async fn install(release: Release) -> Result<String, String> {
     }
     let stage = tempfile::tempdir().map_err(|e| e.to_string())?;
     let download = stage.path().join("download");
-    releases::download_asset(&asset, REPOSITORY, &download).await?;
+    github::download_asset(&asset, REPOSITORY, &download).await?;
     tokio::task::spawn_blocking(move || {
         let root = stage.path().join("package");
         fs::create_dir(&root).map_err(|e| e.to_string())?;
-        // The release contract uses archives, so extraction preserves macOS bundle paths.
-        if !(asset.name.ends_with(".zip")
-            || asset.name.ends_with(".tar.gz")
-            || asset.name.ends_with(".tgz"))
-        {
+        let kind = archive::Kind::of(&asset.name);
+        if kind == archive::Kind::Executable {
             return Err("Launcher updates must be ZIP or tar.gz packages.".into());
         }
-        releases::unpack(&download, &asset.name, &root)?;
-        let executable = executable(&root)?;
+        archive::extract(&download, kind, &root)?;
+        let executable = packaged_executable(&root)?;
         #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))
-                .map_err(|e| e.to_string())?;
-        }
+        archive::make_executable(&executable).map_err(|error| error.to_string())?;
         replace(&root, &executable)?;
         Ok(release.tag_name)
     })
@@ -144,7 +137,7 @@ fn replace(root: &Path, _executable: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn executable(root: &Path) -> Result<std::path::PathBuf, String> {
+fn packaged_executable(root: &Path) -> Result<std::path::PathBuf, String> {
     let relative = if cfg!(target_os = "macos") {
         "Oxide Launcher.app/Contents/MacOS/oxide-launcher"
     } else if cfg!(windows) {
@@ -207,6 +200,7 @@ mod tests {
         let mut release = Release {
             tag_name: "v0.2.0".into(),
             body: None,
+            published_at: None,
             assets: vec![],
         };
         let name = format!(
@@ -242,7 +236,7 @@ mod tests {
     fn finds_only_expected_launcher_path() {
         let root = tempfile::tempdir().unwrap();
         fs::write(root.path().join("hydra-client"), "game").unwrap();
-        assert!(executable(root.path()).is_err());
+        assert!(packaged_executable(root.path()).is_err());
         let path = root.path().join(if cfg!(target_os = "macos") {
             "Oxide Launcher.app/Contents/MacOS/oxide-launcher"
         } else if cfg!(windows) {
@@ -252,6 +246,6 @@ mod tests {
         });
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, "launcher").unwrap();
-        assert_eq!(executable(root.path()).unwrap(), path);
+        assert_eq!(packaged_executable(root.path()).unwrap(), path);
     }
 }

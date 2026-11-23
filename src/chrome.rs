@@ -1,9 +1,22 @@
 //! Native-looking classic launcher chrome, independent of news/editor colors.
-use crate::landscape::color;
 use iced::{
-    Background, Border, Color, Radians, Theme, gradient,
-    widget::{button, container, text_input},
+    Background, Border, Color, Font, Radians, Theme, gradient,
+    widget::{button, container, pick_list, text_input},
 };
+pub(crate) const FONT: Font = if cfg!(windows) {
+    Font::with_name("Tahoma")
+} else {
+    Font::DEFAULT
+};
+pub(crate) const BOLD: Font = Font {
+    weight: iced::font::Weight::Bold,
+    ..FONT
+};
+
+pub(crate) const fn color(hex: u32) -> Color {
+    Color::from_rgb8((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
+}
+
 pub fn theme(dark: bool) -> Theme {
     Theme::custom(
         if dark {
@@ -54,19 +67,8 @@ pub fn frame(_: &Theme) -> container::Style {
         ..border(0xaaaaaa)
     })
 }
-pub fn panel(theme: &Theme) -> container::Style {
-    container::Style::default()
-        .background(theme.palette().background)
-        .border(border(if dark(theme) { 0x606060 } else { 0xb0b0b0 }))
-}
-pub fn heading(theme: &Theme) -> container::Style {
-    container::Style::default().background(color(if dark(theme) { 0x383838 } else { 0xe8e8e8 }))
-}
 pub fn inset(theme: &Theme) -> container::Style {
     container::Style::default().background(color(if dark(theme) { 0x202020 } else { 0xffffff }))
-}
-pub fn news(_: &Theme) -> container::Style {
-    container::Style::default().color(color(0xe0d0d0))
 }
 pub fn control(_: &Theme, status: button::Status) -> button::Style {
     let (top, bottom, edge, foreground) = match status {
@@ -82,9 +84,6 @@ pub fn control(_: &Theme, status: button::Status) -> button::Style {
         ..Default::default()
     }
 }
-pub fn launch(theme: &Theme, status: button::Status) -> button::Style {
-    control(theme, status)
-}
 pub fn tab(theme: &Theme, status: button::Status, active: bool) -> button::Style {
     let mut style = control(theme, status);
     style.border.radius = iced::border::Radius {
@@ -98,14 +97,17 @@ pub fn tab(theme: &Theme, status: button::Status, active: bool) -> button::Style
     }
     style
 }
-pub fn news_link(_: &Theme, status: button::Status) -> button::Style {
-    button::Style {
-        text_color: color(match status {
-            button::Status::Hovered | button::Status::Pressed => 0xddddff,
-            button::Status::Disabled => 0x888888,
-            _ => 0xaaaaff,
-        }),
-        ..Default::default()
+pub fn select(theme: &Theme, status: pick_list::Status) -> pick_list::Style {
+    let (top, bottom, edge) = match status {
+        pick_list::Status::Active => (0xfafafa, 0xe5e5e5, 0x8f8f8f),
+        pick_list::Status::Hovered | pick_list::Status::Opened { .. } => {
+            (0xecf4fc, 0xdcecfc, 0x0078d7)
+        }
+    };
+    pick_list::Style {
+        background: gradient(top, bottom),
+        border: border(edge),
+        ..pick_list::default(theme, status)
     }
 }
 pub fn input(theme: &Theme, status: text_input::Status) -> text_input::Style {
