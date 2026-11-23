@@ -56,7 +56,7 @@ contains the four platform archives and one SHA256SUMS.txt. Download and extract
 the Actions transport ZIP to obtain the actual packages. Nothing is published
 automatically. Normal CI still runs on ordinary branches and pull requests.
 
-Keep launcher downloads separate from game assets in LeowFlow/Oxide: adding a
+Keep launcher downloads separate from game assets in OldSchoolMinecraft/Oxide: adding a
 second platform-matching launcher archive to a game release would make the game's
 asset selection ambiguous. The launcher updates the game, not itself.
 

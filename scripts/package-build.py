@@ -172,7 +172,7 @@ from the extracted folder (ensure ~/.local/bin is on your session PATH):
 macOS: open Oxide Launcher.app. These builds are ad-hoc signed, not notarized.
 
 Enter an offline player name and choose Install & Play. The launcher downloads
-the appropriate game build from https://github.com/LeowFlow/Oxide/releases/latest.
+the appropriate game build from https://github.com/OldSchoolMinecraft/Oxide/releases/latest.
 The game is downloaded separately; its packages include textures and audio.
 Use Profile Editor for launch settings. Oxide News supports Markdown release notes.
 Game updates do not update the launcher executable itself.
@@ -185,7 +185,7 @@ Linux: glibc 2.35+, X11/Wayland, xkbcommon and installed system fonts.
 macOS: 12 or newer. Mac/Linux desktop GUI validation remains outstanding.
 Windows: 64-bit Windows with compatible system graphics drivers.
 
-Game downloads: https://github.com/LeowFlow/Oxide
+Game downloads: https://github.com/OldSchoolMinecraft/Oxide
 Launcher source: https://github.com/OldSchoolMinecraft/Oxide-Launcher
 The Minecraft grass-block icon is Mojang artwork.
 Not affiliated with Mojang or Microsoft.

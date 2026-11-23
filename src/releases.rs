@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const API: &str = "https://api.github.com/repos/LeowFlow/Oxide/releases";
+const REPOSITORY: &str = "OldSchoolMinecraft/Oxide";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Note {
@@ -35,9 +35,11 @@ impl Installed {
 }
 
 pub async fn latest() -> Result<Release, String> {
-    let response = github::get(&format!("{API}/latest"))
-        .await
-        .map_err(|e| format!("Could not reach GitHub: {e}"))?;
+    let response = github::get(&format!(
+        "https://api.github.com/repos/{REPOSITORY}/releases/latest"
+    ))
+    .await
+    .map_err(|e| format!("Could not reach GitHub: {e}"))?;
     match response.status().as_u16() {
         404 => Err("No public release found. If you are offline, you can use a local executable in Profile Editor.".into()),
         403 | 429 => Err("GitHub's request limit was reached. Try again later; your installed game is still available.".into()),
@@ -49,10 +51,12 @@ pub async fn history() -> Result<Vec<Note>, String> {
     const PAGE_SIZE: usize = 100;
     let mut notes = Vec::new();
     for page in 1.. {
-        let response = github::get(&format!("{API}?per_page={PAGE_SIZE}&page={page}"))
-            .await?
-            .error_for_status()
-            .map_err(|error| error.to_string())?;
+        let response = github::get(&format!(
+            "https://api.github.com/repos/{REPOSITORY}/releases?per_page={PAGE_SIZE}&page={page}"
+        ))
+        .await?
+        .error_for_status()
+        .map_err(|error| error.to_string())?;
         let batch: Vec<Note> = response.json().await.map_err(|error| error.to_string())?;
         let last_page = batch.len() < PAGE_SIZE;
         notes.extend(batch);
@@ -80,7 +84,7 @@ pub async fn install(release: Release, data: PathBuf) -> Result<Installed, Strin
     fs::create_dir_all(&data).map_err(|e| e.to_string())?;
     let stage = tempfile::tempdir_in(&data).map_err(|e| e.to_string())?;
     let download = stage.path().join("download");
-    github::download_asset(&asset, "LeowFlow/Oxide", &download).await?;
+    github::download_asset(&asset, REPOSITORY, &download).await?;
     tokio::task::spawn_blocking(move || {
         let root = stage.path().join("game");
         fs::create_dir(&root).map_err(|e| e.to_string())?;
