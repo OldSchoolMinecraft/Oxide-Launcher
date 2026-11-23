@@ -1,15 +1,15 @@
 # Native launcher packages
 
-The launcher has its own version in Cargo.toml (currently 0.1.0), independent of
+The launcher has its own version in Cargo.toml (currently 1.1.0), independent of
 the Oxide game version. These packages contain the launcher and its embedded UI
 assets; the game, textures and audio are installed separately through the launcher.
 
 | Platform | Package |
 | --- | --- |
-| Windows x86_64 | `Oxide-Launcher-v0.1.0-windows-x86_64.zip` |
-| Linux x86_64 | `Oxide-Launcher-v0.1.0-linux-x86_64.tar.gz` |
-| Intel Mac | `Oxide-Launcher-v0.1.0-macos-x86_64.zip` |
-| Apple Silicon | `Oxide-Launcher-v0.1.0-macos-aarch64.zip` |
+| Windows x86_64 | `Oxide-Launcher-v1.1.0-windows-x86_64.zip` |
+| Linux x86_64 | `Oxide-Launcher-v1.1.0-linux-x86_64.tar.gz` |
+| Intel Mac | `Oxide-Launcher-v1.1.0-macos-x86_64.zip` |
+| Apple Silicon | `Oxide-Launcher-v1.1.0-macos-aarch64.zip` |
 
 Mac ZIPs contain `Oxide Launcher.app` with versioned Info.plist metadata and a
 native executable. Native builds are ad-hoc signed and verified; no Developer ID
