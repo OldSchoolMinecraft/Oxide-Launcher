@@ -1,7 +1,7 @@
 //! Classic launcher proportions with native Rust controls and offline access.
 use crate::{
     app::{App, Field, Message, Page},
-    chrome::{self, BOLD, color},
+    chrome::{self, BOLD},
     news, profile,
 };
 use iced::{
@@ -18,7 +18,9 @@ impl App {
         if self.game.is_some() {
             tab_row = tab_row.push(self.page_tab("Game Log", Page::GameLog));
         }
-        tab_row = tab_row.push(self.page_tab("Profile Editor", Page::Settings));
+        tab_row = tab_row
+            .push(self.page_tab("Settings", Page::Settings))
+            .push(self.page_tab("Skin/Cape Editor", Page::Skin));
         let tabs = container(tab_row.spacing(2).align_y(iced::Bottom))
             .padding(iced::Padding {
                 top: 2.,
@@ -33,6 +35,11 @@ impl App {
             Page::Log => self.log_view(),
             Page::GameLog => self.game_log_view(),
             Page::Settings => profile::view(self),
+            Page::Skin => container(self.skin.view().map(Message::Skin))
+                .width(Fill)
+                .height(Fill)
+                .style(chrome::shell)
+                .into(),
         };
         let content = container(content)
             .width(Fill)
@@ -41,7 +48,7 @@ impl App {
         let mut body = column![tabs, content, self.launch_bar()].spacing(0);
         if let Some(error) = &self.save_error {
             body = body.push(
-                container(text(error).size(12).color(color(0xa00000)))
+                container(text(error).size(12).style(chrome::danger))
                     .padding([2, 6])
                     .width(Fill)
                     .style(chrome::shell),
@@ -182,20 +189,28 @@ impl App {
                 lines.push('\n');
                 lines
             });
-        log_view(lines, false)
+        log_view(lines, false, self.dark_log())
     }
 
     fn game_log_view(&self) -> Element<'_, Message> {
-        log_view(String::from_utf8_lossy(&self.game_log).into_owned(), true)
+        log_view(
+            String::from_utf8_lossy(&self.game_log).into_owned(),
+            true,
+            self.dark_log(),
+        )
+    }
+
+    fn dark_log(&self) -> bool {
+        self.settings.dark_theme || self.settings.dark_mode
     }
 }
 
-fn log_view(lines: String, follow: bool) -> Element<'static, Message> {
+fn log_view(lines: String, follow: bool, dark: bool) -> Element<'static, Message> {
     let log = scrollable(text(lines).size(12).font(Font::MONOSPACE)).height(Fill);
     container(if follow { log.anchor_bottom() } else { log })
         .padding(6)
         .width(Fill)
         .height(Fill)
-        .style(chrome::inset)
+        .style(move |_| chrome::inset(dark))
         .into()
 }

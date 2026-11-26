@@ -128,7 +128,16 @@ pub(crate) fn view(app: &App) -> Element<'_, Message> {
             .color(muted),
         )
         .padding(padding::left(LABEL_WIDTH + FIELD_GAP)),
-        toggle("Dark launcher log", settings.dark_mode, Message::DarkMode),
+        toggle("Dark mode", settings.dark_theme, Message::DarkTheme),
+        // The log is always dark in dark mode.
+        toggle(
+            "Dark launcher log",
+            settings.dark_mode || settings.dark_theme,
+            Message::DarkMode
+        )
+        .on_toggle_maybe(
+            (!settings.dark_theme).then_some(Message::DarkMode as fn(bool) -> Message)
+        ),
         toggle(
             "Automatically install game client releases",
             settings.auto_update,
@@ -184,7 +193,10 @@ pub(crate) fn view(app: &App) -> Element<'_, Message> {
     .into()
 }
 
-fn group<'a>(title: &'a str, contents: Element<'a, Message>) -> Element<'a, Message> {
+pub(crate) fn group<'a, Message: 'a>(
+    title: &'a str,
+    contents: Element<'a, Message>,
+) -> Element<'a, Message> {
     stack![
         container(
             container(contents)

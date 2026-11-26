@@ -25,8 +25,9 @@ const BOLD: Font = Font {
 const LINK: Color = color(0xaaaaff);
 const TEXT: Color = color(0xe0d0d0);
 const MUTED: Color = color(0xbdb4b4);
-const TILE_SIZE: u32 = 48;
-const TILE: &[u8; (TILE_SIZE * TILE_SIZE * 4) as usize] = include_bytes!("../assets/stone.rgba");
+pub(crate) const TILE_SIZE: u32 = 48;
+pub(crate) const TILE: &[u8; (TILE_SIZE * TILE_SIZE * 4) as usize] =
+    include_bytes!("../assets/stone.rgba");
 
 pub(crate) struct Entry {
     tag: String,

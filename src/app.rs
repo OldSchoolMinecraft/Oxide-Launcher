@@ -5,7 +5,7 @@ use crate::{
     news, releases,
     releases::Installed,
     settings::{Lighting, Paths, Settings, Visibility},
-    updater,
+    skin, updater,
 };
 use iced::{Subscription, Task, Theme, window};
 use std::{
@@ -19,6 +19,7 @@ pub(crate) enum Page {
     Log,
     GameLog,
     Settings,
+    Skin,
 }
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Field {
@@ -46,6 +47,7 @@ pub(crate) enum Message {
     UpdateLauncher,
     LauncherUpdated(Result<String, String>),
     DarkMode(bool),
+    DarkTheme(bool),
     Check,
     Checked(Result<Release, String>),
     HistoryChecked(Result<Vec<releases::Note>, String>),
@@ -55,6 +57,7 @@ pub(crate) enum Message {
     Tick,
     Window(Option<window::Id>),
     OpenLink(String),
+    Skin(skin::Msg),
 }
 #[derive(Default)]
 enum GameUpdate {
@@ -91,6 +94,7 @@ pub(crate) struct App {
     pub game: Option<Game>,
     pub game_log: Vec<u8>,
     pub launcher_update_status: String,
+    pub skin: skin::Editor,
     dirty_since: Option<Instant>,
     game_update: GameUpdate,
     launcher_update: LauncherUpdate,
@@ -104,9 +108,13 @@ impl App {
         app.launcher_log
             .push_back("[INFO] Oxide Launcher started. Checking for releases.".into());
         let check = app.check();
+        let skin = app
+            .skin
+            .start(app.settings.player_name())
+            .map(Message::Skin);
         (
             app,
-            Task::batch([check, window::latest().map(Message::Window)]),
+            Task::batch([check, skin, window::latest().map(Message::Window)]),
         )
     }
 
@@ -120,9 +128,13 @@ impl App {
             .as_ref()
             .ok()
             .and_then(|paths| Installed::load(&paths.data));
+        let settings = settings.unwrap_or_default();
+        let skin = skin::Editor::new(paths.as_ref().ok().map(|paths| paths.data.as_path()))
+            .with_source(settings.skin_source);
         Self {
             paths,
-            settings: settings.unwrap_or_default(),
+            skin,
+            settings,
             page: Page::News,
             release: None,
             release_notes: news::parse(None),
@@ -145,15 +157,42 @@ impl App {
     }
 
     pub fn theme(&self) -> Theme {
-        chrome::theme(self.settings.dark_mode && self.page != Page::Settings)
+        chrome::theme(self.settings.dark_theme)
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        if self.game.is_some() || self.settings_dirty() {
+        let tick = if self.game.is_some() || self.settings_dirty() {
             iced::time::every(Duration::from_millis(250)).map(|_| Message::Tick)
         } else {
             Subscription::none()
-        }
+        };
+        let frames = if self.page == Page::Skin && self.game.is_none() && self.skin.animating() {
+            iced::time::every(Duration::from_millis(16))
+                .map(|now| Message::Skin(skin::Msg::Frame(now)))
+        } else {
+            Subscription::none()
+        };
+        // Undo and redo shortcuts, unless a text box used the key press.
+        let keys = if self.page == Page::Skin {
+            iced::event::listen_with(|event, status, _| match (event, status) {
+                (
+                    iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+                        key: iced::keyboard::Key::Character(key),
+                        modifiers,
+                        ..
+                    }),
+                    iced::event::Status::Ignored,
+                ) if modifiers.command() => match (key.as_str(), modifiers.shift()) {
+                    ("z" | "Z", false) => Some(Message::Skin(skin::Msg::Undo)),
+                    ("y" | "Y", _) | ("z" | "Z", true) => Some(Message::Skin(skin::Msg::Redo)),
+                    _ => None,
+                },
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
+        Subscription::batch([tick, frames, keys])
     }
 
     pub fn settings_dirty(&self) -> bool {
@@ -261,6 +300,12 @@ impl App {
                     Field::LauncherHeight => &mut self.settings.launcher_height,
                 } = value;
                 self.dirty_since = Some(Instant::now());
+                if matches!(field, Field::Username) {
+                    return self
+                        .skin
+                        .username_changed(self.settings.player_name())
+                        .map(Message::Skin);
+                }
             }
             Message::Visibility(visibility) => {
                 self.settings.visibility = visibility;
@@ -276,6 +321,10 @@ impl App {
             }
             Message::DarkMode(enabled) => {
                 self.settings.dark_mode = enabled;
+                self.save();
+            }
+            Message::DarkTheme(enabled) => {
+                self.settings.dark_theme = enabled;
                 self.save();
             }
             Message::AutoUpdate(enabled) => {
@@ -327,6 +376,14 @@ impl App {
                 if let Err(error) = news::open_link(&link) {
                     self.error = Some(format!("Could not open news link: {error}"));
                 }
+            }
+            Message::Skin(message) => {
+                if let skin::Msg::Source(source) = message {
+                    self.settings.skin_source = source;
+                    self.save();
+                }
+                let username = self.settings.player_name().map(str::to_owned);
+                return self.skin.update(message, username).map(Message::Skin);
             }
             Message::Check | Message::Install | Message::Play => {}
         }

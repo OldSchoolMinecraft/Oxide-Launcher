@@ -45,6 +45,25 @@ impl fmt::Display for Lighting {
         })
     }
 }
+/// Where the Skin Editor looks a username's skin and cape up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SkinSource {
+    /// The Old School Minecraft cosmetics the Oxide client shows first.
+    #[default]
+    Osm,
+    Mojang,
+}
+impl SkinSource {
+    pub const ALL: [Self; 2] = [Self::Osm, Self::Mojang];
+}
+impl fmt::Display for SkinSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Osm => "OSM",
+            Self::Mojang => "Mojang",
+        })
+    }
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -64,6 +83,9 @@ pub struct Settings {
     pub auto_update: bool,
     pub launcher_auto_update: bool,
     pub dark_mode: bool,
+    /// Dark chrome for the whole launcher; `dark_mode` covers only the log.
+    pub dark_theme: bool,
+    pub skin_source: SkinSource,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -84,6 +106,8 @@ impl Default for Settings {
             auto_update: true,
             launcher_auto_update: true,
             dark_mode: true,
+            dark_theme: false,
+            skin_source: SkinSource::default(),
         }
     }
 }

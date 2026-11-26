@@ -8,6 +8,8 @@ mod news;
 mod profile;
 mod releases;
 mod settings;
+mod skin;
+mod skin_model;
 mod ui;
 mod updater;
 
@@ -45,6 +47,7 @@ fn main() -> iced::Result {
                 ..Default::default()
             },
             size: iced::Size::new(width as f32, height as f32),
+            resizable: true,
             min_size: Some(iced::Size::new(
                 MIN_WINDOW_SIZE.0 as f32,
                 MIN_WINDOW_SIZE.1 as f32,
